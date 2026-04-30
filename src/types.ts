@@ -16,6 +16,8 @@ export interface Event {
   };
   language?: string;
   field?: string;
+  industry?: string;
+  eligibility?: string;
   difficulty?: 'beginner' | 'intermediate' | 'advanced';
 }
 

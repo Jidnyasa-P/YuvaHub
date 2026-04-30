@@ -60,7 +60,9 @@ service cloud.firestore {
         request.resource.data.uid == request.auth.uid &&
         request.resource.data.email == request.auth.token.email &&
         (!('bookmarkedEventIds' in request.resource.data) || request.resource.data.bookmarkedEventIds is list) &&
-        (!('registeredEventIds' in request.resource.data) || request.resource.data.registeredEventIds is list);
+        (!('registeredEventIds' in request.resource.data) || request.resource.data.registeredEventIds is list) &&
+        (!('skills' in request.resource.data) || request.resource.data.skills is list) &&
+        (!('preferredDomains' in request.resource.data) || request.resource.data.preferredDomains is list);
     }
 
     // ===============================================================

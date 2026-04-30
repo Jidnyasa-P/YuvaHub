@@ -16,7 +16,17 @@ import { motion, AnimatePresence } from 'motion/react';
 import { fetchEventsAndSchemes, getSearchSuggestions, getRelatedDomains, getAssistantResponse, generateDraft } from './services/geminiService';
 import { Event, UserLocation, UserProfile, Notification, UserRegistration, Message, RelatedDomains, ChatMessage, ApplicationStatus } from './types';
 import { cn } from './lib/utils';
-import { auth, signInWithGoogle, signInWithApple, logout, db } from './lib/firebase';
+import { 
+  auth, 
+  signInWithGoogle, 
+  signInWithApple, 
+  logout, 
+  db,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+  updateProfile
+} from './lib/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp, collection, addDoc, getDocs, query, orderBy, where } from 'firebase/firestore';
 import emailjs from '@emailjs/browser';
@@ -52,6 +62,9 @@ export default function App() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'hackathon' | 'scheme' | 'program'>('all');
+  const [selectedOrganizer, setSelectedOrganizer] = useState('all');
+  const [selectedIndustry, setSelectedIndustry] = useState('all');
+  const [selectedEligibility, setSelectedEligibility] = useState('all');
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [nearbyEvents, setNearbyEvents] = useState<Event[]>([]);
@@ -709,15 +722,23 @@ export default function App() {
     }
   }, [userLocation, events, profile?.notificationsEnabled, notifiedEventIds, addNotification]);
 
+  const organizers = useMemo(() => ['all', ...Array.from(new Set(events.map(e => e.organization)))], [events]);
+  const industries = useMemo(() => ['all', ...Array.from(new Set(events.map(e => e.industry).filter(Boolean) as string[]))], [events]);
+  const eligibilities = useMemo(() => ['all', ...Array.from(new Set(events.map(e => e.eligibility).filter(Boolean) as string[]))], [events]);
+
   const filteredEvents = useMemo(() => {
     return events.filter(event => {
       const matchesSearch = event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           event.organization.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           event.description.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesFilter = filterType === 'all' || event.type === filterType;
-      return matchesSearch && matchesFilter;
+      const matchesType = filterType === 'all' || event.type === filterType;
+      const matchesOrganizer = selectedOrganizer === 'all' || event.organization === selectedOrganizer;
+      const matchesIndustry = selectedIndustry === 'all' || event.industry === selectedIndustry;
+      const matchesEligibility = selectedEligibility === 'all' || event.eligibility === selectedEligibility;
+      
+      return matchesSearch && matchesType && matchesOrganizer && matchesIndustry && matchesEligibility;
     });
-  }, [events, searchQuery, filterType]);
+  }, [events, searchQuery, filterType, selectedOrganizer, selectedIndustry, selectedEligibility]);
 
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -770,6 +791,12 @@ export default function App() {
       profile.preferredDomains?.forEach(domain => {
         if (a.title.toLowerCase().includes(domain.toLowerCase())) scoreA += 3;
         if (b.title.toLowerCase().includes(domain.toLowerCase())) scoreB += 3;
+      });
+
+      // Skill matching
+      profile.skills?.forEach(skill => {
+        if (a.description.toLowerCase().includes(skill.toLowerCase())) scoreA += 4;
+        if (b.description.toLowerCase().includes(skill.toLowerCase())) scoreB += 4;
       });
 
       // Budget matching
@@ -1068,6 +1095,43 @@ export default function App() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mb-10">
+                <div>
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 px-1">My Skills</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {['Frontend', 'Backend', 'Python', 'Design', 'Management', 'Public Speaking', 'Data Analysis', 'Problem Solving'].map(s => (
+                      <button 
+                        key={s}
+                        onClick={() => {
+                          const skills = tempProfile.skills || [];
+                          setTempProfile({ ...tempProfile, skills: skills.includes(s) ? skills.filter(x => x !== s) : [...skills, s] });
+                        }}
+                        className={cn("px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all", tempProfile.skills?.includes(s) ? "bg-indigo-600 text-white border-indigo-600" : "bg-slate-50 text-slate-400 border-slate-100")}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 px-1">Areas of Interest</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {['AI/ML', 'Blockchain', 'Cybersecurity', 'Sustainable Devel.', 'Govt. Schemes', 'Internships', 'Social Impact'].map(d => (
+                      <button 
+                        key={d}
+                        onClick={() => {
+                          const domains = tempProfile.preferredDomains || [];
+                          setTempProfile({ ...tempProfile, preferredDomains: domains.includes(d) ? domains.filter(x => x !== d) : [...domains, d] });
+                        }}
+                        className={cn("px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all", tempProfile.preferredDomains?.includes(d) ? "bg-indigo-600 text-white border-indigo-600" : "bg-slate-50 text-slate-400 border-slate-100")}
+                      >
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               <div className="flex items-center justify-between pt-6 border-t border-slate-100">
                 {user ? (
                   <button 
@@ -1162,7 +1226,7 @@ export default function App() {
             </header>
 
             {/* Filter Bar */}
-            <div className="flex flex-wrap items-center gap-2 mb-10 overflow-x-auto pb-4 scrollbar-hide">
+            <div className="flex flex-wrap items-center gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
               {[
                 { id: 'all', label: 'All Feeds', icon: LayoutGrid },
                 { id: 'hackathon', label: 'Hackathons', icon: Sparkles },
@@ -1185,6 +1249,54 @@ export default function App() {
               ))}
             </div>
 
+            {/* Advanced Filters */}
+            <div className="flex flex-wrap items-center gap-3 mb-10 p-6 bg-white rounded-[32px] border border-slate-100 shadow-sm">
+              <div className="flex flex-col gap-1.5 min-w-[200px] flex-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Organizer</label>
+                <select 
+                  value={selectedOrganizer}
+                  onChange={(e) => setSelectedOrganizer(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-xs font-bold focus:ring-2 focus:ring-indigo-500/10 outline-none"
+                >
+                  {organizers.map(o => <option key={o} value={o}>{o === 'all' ? 'All Organizations' : o}</option>)}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5 min-w-[200px] flex-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Industry</label>
+                <select 
+                  value={selectedIndustry}
+                  onChange={(e) => setSelectedIndustry(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-xs font-bold focus:ring-2 focus:ring-indigo-500/10 outline-none"
+                >
+                  {industries.map(i => <option key={i} value={i}>{i === 'all' ? 'All Industries' : i}</option>)}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5 min-w-[200px] flex-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Eligibility</label>
+                <select 
+                  value={selectedEligibility}
+                  onChange={(e) => setSelectedEligibility(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-xs font-bold focus:ring-2 focus:ring-indigo-500/10 outline-none"
+                >
+                  {eligibilities.map(el => <option key={el} value={el}>{el === 'all' ? 'All Eligibility' : el}</option>)}
+                </select>
+              </div>
+
+              <button 
+                onClick={() => {
+                  setSelectedOrganizer('all');
+                  setSelectedIndustry('all');
+                  setSelectedEligibility('all');
+                  setFilterType('all');
+                }}
+                className="mt-6 px-4 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500 transition-colors"
+              >
+                Reset
+              </button>
+            </div>
+
             {loading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {[...Array(6)].map((_, i) => (
@@ -1194,25 +1306,49 @@ export default function App() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 <AnimatePresence mode="popLayout">
-                  {events
-                    .filter(e => filterType === 'all' || e.type === filterType)
-                    .slice(0, visibleCount)
-                    .map((event, idx) => (
-                      <motion.div
-                        layout
-                        key={event.id}
-                        id={`event-${event.id}`}
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        transition={{ duration: 0.4, delay: idx * 0.05 }}
+                  {filteredEvents.length === 0 ? (
+                    <motion.div 
+                      key="no-results"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="col-span-full py-20 text-center bg-white rounded-[40px] border border-dashed border-slate-200"
+                    >
+                      <Info className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                      <h3 className="text-lg font-black text-slate-900 mb-1">No matches found</h3>
+                      <p className="text-slate-500 text-sm font-medium mb-6 px-4">Try adjusting your filters or search terms to find more opportunities.</p>
+                      <button 
+                        onClick={() => {
+                          setSelectedOrganizer('all');
+                          setSelectedIndustry('all');
+                          setSelectedEligibility('all');
+                          setFilterType('all');
+                          setSearchQuery('');
+                        }}
+                        className="bg-indigo-600 px-6 py-3 rounded-2xl text-xs font-black text-white uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
                       >
-                        <EventCard event={event} />
-                      </motion.div>
-                    ))}
+                        Clear All Filters
+                      </button>
+                    </motion.div>
+                  ) : (
+                    filteredEvents
+                      .slice(0, visibleCount)
+                      .map((event, idx) => (
+                        <motion.div
+                          layout
+                          key={event.id}
+                          id={`event-${event.id}`}
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.9 }}
+                          transition={{ duration: 0.4, delay: idx * 0.05 }}
+                        >
+                          <EventCard event={event} />
+                        </motion.div>
+                      ))
+                  )}
                 </AnimatePresence>
                 
-                {events.length > visibleCount && (
+                {filteredEvents.length > visibleCount && (
                    <button 
                     onClick={() => setVisibleCount(prev => prev + 6)}
                     className="col-span-full py-8 mt-4 text-slate-400 hover:text-indigo-600 font-black text-xs uppercase tracking-[0.2em] flex flex-col items-center gap-3 transition-colors group"
@@ -1418,6 +1554,7 @@ export default function App() {
       <SuccessModal />
       <DraftViewer />
       <ToastContainer />
+      <LoginModal />
 
       {/* Floating Toggle for Mobile AI */}
       <button 
@@ -1542,6 +1679,18 @@ export default function App() {
               <MapPin className="w-3.5 h-3.5 text-indigo-500" />
               <span className="truncate">{event.location}</span>
             </div>
+            {event.industry && (
+              <div className="flex items-center gap-2.5 text-xs font-bold text-indigo-500/70">
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>{event.industry}</span>
+              </div>
+            )}
+            {event.eligibility && (
+              <div className="flex items-center gap-2.5 text-xs font-bold text-emerald-500/70">
+                <Users className="w-3.5 h-3.5" />
+                <span>{event.eligibility}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1597,11 +1746,12 @@ export default function App() {
       fieldOfStudy: '',
       preferredLanguage: 'English',
       budgetPreference: 'any',
-      preferredDomains: []
+      preferredDomains: [],
+      skills: []
     });
 
     const handleNext = () => {
-      if (step < 4) setStep(step + 1);
+      if (step < 5) setStep(step + 1);
       else {
         const updated = { ...profile, ...data, onboardingComplete: true } as UserProfile;
         setProfile(updated);
@@ -1622,7 +1772,7 @@ export default function App() {
           className="bg-white w-full max-w-sm rounded-[40px] p-8 relative shadow-2xl overflow-hidden"
         >
           <div className="h-1.5 w-full bg-slate-100 rounded-full mb-8 overflow-hidden">
-             <motion.div animate={{ width: `${(step / 4) * 100}%` }} className="h-full bg-indigo-600" />
+             <motion.div animate={{ width: `${(step / 5) * 100}%` }} className="h-full bg-indigo-600" />
           </div>
 
           <AnimatePresence mode="wait">
@@ -1688,9 +1838,9 @@ export default function App() {
               {step === 4 && (
                 <div className="space-y-6 text-center">
                   <Star className="w-12 h-12 text-indigo-600 mx-auto mb-2" />
-                  <h3 className="text-xl font-black text-slate-900">Final Step: Domains</h3>
+                  <h3 className="text-xl font-black text-slate-900">Interests & Domains</h3>
                   <div className="flex flex-wrap gap-2 justify-center">
-                    {['AI/ML', 'Blockchain', 'Cybersecurity', 'Sustainable Devel.', 'Govt. Schemes', 'Internships'].map(d => (
+                    {['AI/ML', 'Blockchain', 'Cybersecurity', 'Sustainable Devel.', 'Govt. Schemes', 'Internships', 'Social Impact'].map(d => (
                       <button 
                         key={d}
                         onClick={() => {
@@ -1705,13 +1855,33 @@ export default function App() {
                   </div>
                 </div>
               )}
+              {step === 5 && (
+                <div className="space-y-6 text-center">
+                  <Zap className="w-12 h-12 text-indigo-600 mx-auto mb-2" />
+                  <h3 className="text-xl font-black text-slate-900">Your Expertise (Skills)</h3>
+                  <div className="flex flex-wrap gap-2 justify-center">
+                    {['Frontend', 'Backend', 'Python', 'Design', 'Management', 'Public Speaking', 'Data Analysis', 'Problem Solving'].map(s => (
+                      <button 
+                        key={s}
+                        onClick={() => {
+                          const skills = data.skills || [];
+                          setData({ ...data, skills: skills.includes(s) ? skills.filter(x => x !== s) : [...skills, s] });
+                        }}
+                        className={cn("px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all", data.skills?.includes(s) ? "bg-indigo-600 text-white" : "bg-slate-50")}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </motion.div>
           </AnimatePresence>
 
           <div className="mt-10 flex gap-3">
              <button onClick={() => setStep(s => Math.max(1, s - 1))} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest">Back</button>
              <button onClick={handleNext} className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-100">
-               {step === 4 ? 'Finish' : 'Next'}
+               {step === 5 ? 'Finish' : 'Next'}
              </button>
           </div>
         </motion.div>
@@ -1720,6 +1890,241 @@ export default function App() {
   }
 
   // Extract other modals to sub-components for better organization
+  function LoginModal() {
+    const [isLogin, setIsLogin] = useState(true);
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [name, setName] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [showForgotPassword, setShowForgotPassword] = useState(false);
+
+    if (!showLoginModal) return null;
+
+    const handleEmailAuth = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setLoading(true);
+      try {
+        if (isLogin) {
+          await signInWithEmailAndPassword(auth, email, password);
+          addToast("Welcome Back!", "Successfully signed in.", "success");
+        } else {
+          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+          await updateProfile(userCredential.user, { displayName: name });
+          addToast("Account Created", "Welcome to YuvaHub!", "success");
+        }
+        setShowLoginModal(false);
+      } catch (err: any) {
+        console.error("Auth error:", err);
+        addToast("Authentication Error", err.message || "Failed to authenticate.", "warning");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleGoogleLogin = async () => {
+      setLoading(true);
+      try {
+        await signInWithGoogle();
+        addToast("Welcome!", "Successfully signed in with Google.", "success");
+        setShowLoginModal(false);
+      } catch (err: any) {
+        console.error("Google login error:", err);
+        addToast("Login Failed", "Failed to sign in with Google.", "warning");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleResetPassword = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!email) {
+        addToast("Email Required", "Please enter your email to reset password.", "warning");
+        return;
+      }
+      setLoading(true);
+      try {
+        await sendPasswordResetEmail(auth, email);
+        addToast("Reset Sent", "Check your email for password reset instructions.", "success");
+        setShowForgotPassword(false);
+      } catch (err: any) {
+        addToast("Error", err.message || "Failed to send reset email.", "warning");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    return (
+      <AnimatePresence>
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }} 
+            onClick={() => setShowLoginModal(false)} 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" 
+          />
+          <motion.div 
+            initial={{ scale: 0.9, y: 20, opacity: 0 }} 
+            animate={{ scale: 1, y: 0, opacity: 1 }} 
+            exit={{ scale: 0.9, y: 20, opacity: 0 }} 
+            className="bg-white w-full max-w-md rounded-[40px] shadow-3xl overflow-hidden relative z-10"
+          >
+            <div className="p-8 sm:p-10">
+              <div className="flex justify-between items-center mb-8">
+                <div className="flex items-center gap-3">
+                  <div className="bg-indigo-600 w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
+                    <Sparkles className="text-white w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-black tracking-tight text-slate-900">
+                      {showForgotPassword ? 'Reset Password' : (isLogin ? 'Welcome Back' : 'Join YuvaHub')}
+                    </h2>
+                    <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">
+                      {showForgotPassword ? 'Enter your email' : 'Empower your future'}
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowLoginModal(false)}
+                  className="p-2 hover:bg-slate-100 rounded-xl transition-colors"
+                >
+                  <X className="w-6 h-6 text-slate-400" />
+                </button>
+              </div>
+
+              {showForgotPassword ? (
+                <form onSubmit={handleResetPassword} className="space-y-6">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Email Address</label>
+                    <div className="relative">
+                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input 
+                        required
+                        type="email" 
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="your@email.com"
+                        className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold outline-none"
+                      />
+                    </div>
+                  </div>
+                  <button 
+                    type="submit" 
+                    disabled={loading}
+                    className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-slate-200 hover:bg-slate-800 active:scale-[0.98] transition-all disabled:opacity-50"
+                  >
+                    {loading ? 'Sending...' : 'Send Reset Link'}
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setShowForgotPassword(false)}
+                    className="w-full text-center text-xs font-bold text-slate-400 hover:text-indigo-600 transition-colors"
+                  >
+                    Back to Login
+                  </button>
+                </form>
+              ) : (
+                <>
+                  <button 
+                    onClick={handleGoogleLogin}
+                    disabled={loading}
+                    className="w-full flex items-center justify-center gap-3 py-4 border border-slate-200 rounded-2xl mb-8 group hover:border-indigo-100 hover:bg-indigo-50 transition-all active:scale-[0.98]"
+                  >
+                    <svg className="w-5 h-5" viewBox="0 0 24 24">
+                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                    </svg>
+                    <span className="text-sm font-bold text-slate-600 group-hover:text-indigo-600">Continue with Google</span>
+                  </button>
+
+                  <div className="relative mb-8">
+                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
+                    <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-4 font-black text-slate-300 tracking-widest">Or with email</span></div>
+                  </div>
+
+                  <form onSubmit={handleEmailAuth} className="space-y-4">
+                    {!isLogin && (
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Full Name</label>
+                        <div className="relative">
+                          <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <input 
+                            required
+                            type="text" 
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="John Doe"
+                            className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold outline-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Email Address</label>
+                      <div className="relative">
+                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input 
+                          required
+                          type="email" 
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="your@email.com"
+                          className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Password</label>
+                      <div className="relative">
+                        <Loader2 className={cn("absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400", !loading && "hidden")} />
+                        {!loading && <Clock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />}
+                        <input 
+                          required
+                          type="password" 
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <button 
+                        type="button" 
+                        onClick={() => setShowForgotPassword(true)}
+                        className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:underline"
+                      >
+                        Forgot Password?
+                      </button>
+                    </div>
+
+                    <button 
+                      type="submit" 
+                      disabled={loading}
+                      className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-slate-200 hover:bg-slate-800 active:scale-[0.98] transition-all disabled:opacity-50"
+                    >
+                      {loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}
+                    </button>
+                  </form>
+
+                  <p className="mt-8 text-center text-xs font-bold text-slate-400">
+                    {isLogin ? "Don't have an account? " : "Already have an account? "}
+                    <button 
+                      onClick={() => setIsLogin(!isLogin)}
+                      className="text-indigo-600 hover:underline"
+                    >
+                      {isLogin ? 'Sign Up' : 'Log In'}
+                    </button>
+                  </p>
+                </>
+              )}
+            </div>
+          </motion.div>
+        </div>
+      </AnimatePresence>
+    );
+  }
+
   function SuccessModal() {
     return (
       <AnimatePresence>

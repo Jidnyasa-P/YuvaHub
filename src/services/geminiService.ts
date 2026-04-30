@@ -72,6 +72,7 @@ export async function fetchEventsAndSchemes(query: string = "", profile?: UserPr
       - Location: ${profile.location}
       - Age: ${profile.age}
       - Interests: ${profile.interests.join(", ")}
+      - Skills: ${profile.skills?.join(", ")}
     ` : "";
 
     const currentDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -98,6 +99,8 @@ export async function fetchEventsAndSchemes(query: string = "", profile?: UserPr
           applyLink: { type: Type.STRING },
           price: { type: Type.STRING },
           isPaid: { type: Type.BOOLEAN },
+          industry: { type: Type.STRING },
+          eligibility: { type: Type.STRING },
           coordinates: {
             type: Type.OBJECT,
             properties: {
@@ -107,7 +110,7 @@ export async function fetchEventsAndSchemes(query: string = "", profile?: UserPr
             required: ["lat", "lng"]
           }
         },
-        required: ["id", "title", "organization", "type", "description", "location", "date", "link", "applyLink", "price", "isPaid", "coordinates"]
+        required: ["id", "title", "organization", "type", "description", "location", "date", "link", "applyLink", "price", "isPaid", "industry", "eligibility", "coordinates"]
       }
     };
 

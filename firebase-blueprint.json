@@ -10,6 +10,8 @@
         "location": { "type": "string" },
         "age": { "type": "number" },
         "interests": { "type": "array", "items": { "type": "string" } },
+        "skills": { "type": "array", "items": { "type": "string" } },
+        "preferredDomains": { "type": "array", "items": { "type": "string" } },
         "notificationsEnabled": { "type": "boolean" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },

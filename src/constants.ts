@@ -13,6 +13,8 @@ export const FALLBACK_EVENTS: Event[] = [
     applyLink: "https://developers.google.com/community/challenge",
     price: "Free",
     isPaid: false,
+    industry: "Social Impact / AI",
+    eligibility: "Students globally",
     coordinates: { lat: 37.422488, lng: -122.084248 }
   },
   {
@@ -27,6 +29,8 @@ export const FALLBACK_EVENTS: Event[] = [
     applyLink: "https://www.sih.gov.in/",
     price: "Free",
     isPaid: false,
+    industry: "Engineering / Software",
+    eligibility: "Indian College Students",
     coordinates: { lat: 28.6139, lng: 77.2090 }
   },
   {
@@ -55,6 +59,8 @@ export const FALLBACK_EVENTS: Event[] = [
     applyLink: "https://pminternship.mca.gov.in/",
     price: "Free",
     isPaid: false,
+    industry: "Govt Jobs / Skill Development",
+    eligibility: "Graduates / Youth (18-25)",
     coordinates: { lat: 28.6139, lng: 77.2090 }
   },
   {
@@ -111,6 +117,8 @@ export const FALLBACK_EVENTS: Event[] = [
     applyLink: "https://scholarships.gov.in/",
     price: "Free",
     isPaid: false,
+    industry: "Education / Govt. Schemes",
+    eligibility: "Minority Community Students",
     coordinates: { lat: 28.6139, lng: 77.2090 }
   },
   {
