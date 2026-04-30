@@ -81,7 +81,8 @@ export async function fetchEventsAndSchemes(query: string = "", profile?: UserPr
       ${query ? `PRIORITY FOCUS: Search specifically for "${query}". If "${query}" refers to a specific known program, ensure it is in the results.` : ''}
       ONLY include events with deadlines AFTER ${currentDate}.
       ${profileContext}
-      STRICT REQUIREMENT: Return ONLY a JSON array of objects.`;
+      STRICT REQUIREMENT: Return ONLY a JSON array of objects.
+      IMPORTANT: Every object MUST include highly accurate "industry" (e.g. AI, Govt, Finance) and "eligibility" (e.g. Students, Graduates) fields.`;
 
     const schema = {
       type: Type.ARRAY,
@@ -120,8 +121,8 @@ export async function fetchEventsAndSchemes(query: string = "", profile?: UserPr
         model: "gemini-3-flash-preview",
         contents: prompt,
         config: {
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           tools: [{ googleSearch: {} }],
+          toolConfig: { includeServerSideToolInvocations: true },
           responseMimeType: "application/json",
           responseSchema: schema,
         },
@@ -135,7 +136,6 @@ export async function fetchEventsAndSchemes(query: string = "", profile?: UserPr
         model: "gemini-3-flash-preview",
         contents: prompt + "\n\nNote: Use internal knowledge. Speed is priority. JSON ONLY.",
         config: {
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           responseMimeType: "application/json",
           responseSchema: schema,
         },
@@ -162,7 +162,6 @@ export async function getSearchSuggestions(partialQuery: string): Promise<string
       model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
-        thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
@@ -211,7 +210,6 @@ export async function getRelatedDomains(topic: string): Promise<RelatedDomains |
       model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
         responseMimeType: "application/json",
         responseSchema: schema
       },
@@ -247,8 +245,8 @@ export async function getAssistantResponse(userMessage: string, profile: UserPro
       model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        tools: [{ googleSearch: {} }] // Allow searching for external info if not in context
+        tools: [{ googleSearch: {} }],
+        toolConfig: { includeServerSideToolInvocations: true }
       },
     });
 
@@ -272,7 +270,7 @@ export async function generateDraft(type: 'SOP' | 'Email', opportunityTitle: str
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: prompt,
-      config: { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+      config: { },
     });
 
     return response.text;

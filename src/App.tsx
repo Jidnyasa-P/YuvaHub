@@ -728,9 +728,19 @@ export default function App() {
 
   const filteredEvents = useMemo(() => {
     return events.filter(event => {
-      const matchesSearch = event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          event.organization.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          event.description.toLowerCase().includes(searchQuery.toLowerCase());
+      const title = event.title?.toLowerCase() || "";
+      const org = event.organization?.toLowerCase() || "";
+      const desc = event.description?.toLowerCase() || "";
+      const ind = event.industry?.toLowerCase() || "";
+      const elig = event.eligibility?.toLowerCase() || "";
+      const query = searchQuery.toLowerCase();
+
+      const matchesSearch = title.includes(query) ||
+                          org.includes(query) ||
+                          desc.includes(query) ||
+                          ind.includes(query) ||
+                          elig.includes(query);
+
       const matchesType = filterType === 'all' || event.type === filterType;
       const matchesOrganizer = selectedOrganizer === 'all' || event.organization === selectedOrganizer;
       const matchesIndustry = selectedIndustry === 'all' || event.industry === selectedIndustry;
@@ -1166,9 +1176,33 @@ export default function App() {
           <div className="p-6 lg:p-10">
             {/* Existing Hero & Search */}
             <header className="mb-12">
+              {apiKeyMissing && (
+                <div className="mb-6 p-4 bg-amber-50 border border-amber-100 rounded-3xl flex items-start gap-4 shadow-sm">
+                  <div className="p-2 bg-amber-100 rounded-xl text-amber-600">
+                    <AlertTriangle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-amber-900 mb-0.5 uppercase tracking-tight">AI Offline / Limited Experience</h4>
+                    <p className="text-xs text-amber-700 font-medium leading-relaxed">
+                      YuvaHub's smart features require an API key. We're currently showing high-quality fallback opportunities.
+                      <span className="block mt-1 font-black opacity-60">Add GEMINI_API_KEY to your settings to enable full AI search and assistance.</span>
+                    </p>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center gap-3 mb-4">
-                <div className="px-3 py-1 bg-indigo-50 border border-indigo-100 rounded-full text-[10px] font-black text-indigo-600 uppercase tracking-widest">
-                   {lastFetch > 0 ? `Updated ${new Date(lastFetch).toLocaleTimeString()}` : 'Live Opportunities'}
+                <div className="flex items-center gap-2">
+                  <div className="px-3 py-1 bg-indigo-50 border border-indigo-100 rounded-full text-[10px] font-black text-indigo-600 uppercase tracking-widest">
+                    {lastFetch > 0 ? `Updated ${new Date(lastFetch).toLocaleTimeString()}` : 'Live Opportunities'}
+                  </div>
+                  <button 
+                    onClick={() => loadInitialData(true)}
+                    disabled={isUpdating}
+                    className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400 hover:text-indigo-600 transition-colors disabled:opacity-50"
+                    title="Check for New Updates"
+                  >
+                    <RefreshCw className={cn("w-3.5 h-3.5", isUpdating && "animate-spin")} />
+                  </button>
                 </div>
               </div>
               <h2 className="text-4xl lg:text-5xl font-black text-slate-900 tracking-tighter max-w-2xl leading-[1.1] mb-8">
@@ -1726,8 +1760,10 @@ export default function App() {
             </div>
             <button 
               onClick={async () => {
+                setAssistantLoading(true);
                 const draft = await generateDraft('SOP', event.title, event.organization, profile);
                 setDraftContent(draft);
+                setAssistantLoading(false);
               }}
               className="text-[10px] font-black text-slate-400 uppercase hover:text-indigo-600 transition-colors"
             >

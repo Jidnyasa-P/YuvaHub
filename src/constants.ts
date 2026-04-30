@@ -45,6 +45,8 @@ export const FALLBACK_EVENTS: Event[] = [
     applyLink: "https://imaginecup.microsoft.com/",
     price: "Free",
     isPaid: false,
+    industry: "Tech / Software",
+    eligibility: "Students 16+",
     coordinates: { lat: 47.6740, lng: -122.1215 }
   },
   {
@@ -75,6 +77,8 @@ export const FALLBACK_EVENTS: Event[] = [
     applyLink: "https://aws.amazon.com/training/digital/aws-cloud-up-for-her/",
     price: "Free",
     isPaid: false,
+    industry: "Cloud Computing",
+    eligibility: "Women learners",
     coordinates: { lat: 47.6062, lng: -122.3321 }
   },
   {
@@ -89,6 +93,8 @@ export const FALLBACK_EVENTS: Event[] = [
     applyLink: "https://www.tcscodevita.com/",
     price: "Free",
     isPaid: false,
+    industry: "Competitive Programming",
+    eligibility: "UG/PG Students",
     coordinates: { lat: 19.0760, lng: 72.8777 }
   },
   {
@@ -103,6 +109,8 @@ export const FALLBACK_EVENTS: Event[] = [
     applyLink: "https://www.facebook.com/codingcompetitions/hacker-cup",
     price: "Free",
     isPaid: false,
+    industry: "Algorithms / Software",
+    eligibility: "Open to all",
     coordinates: { lat: 37.4848, lng: -122.1484 }
   },
   {
@@ -133,6 +141,8 @@ export const FALLBACK_EVENTS: Event[] = [
     applyLink: "https://github.com/education/Octernships",
     price: "Paid (Stipend)",
     isPaid: false,
+    industry: "Open Source / Internships",
+    eligibility: "GitHub Global Campus Students",
     coordinates: { lat: 37.7749, lng: -122.4194 }
   },
   {
@@ -147,6 +157,8 @@ export const FALLBACK_EVENTS: Event[] = [
     applyLink: "https://fellowship.mlh.io/",
     price: "Paid (Stipend)",
     isPaid: false,
+    industry: "Software Development",
+    eligibility: "Students/Recent Grads globally",
     coordinates: { lat: 40.7128, lng: -74.0060 }
   },
   {
@@ -161,6 +173,8 @@ export const FALLBACK_EVENTS: Event[] = [
     applyLink: "https://unstop.com/hackathons/flipkart-grid-60-software-development-track-flipkart-894234",
     price: "Free",
     isPaid: false,
+    industry: "E-commerce / Coding",
+    eligibility: "B.Tech/BE/M.Tech Students",
     coordinates: { lat: 12.9716, lng: 77.5946 }
   },
   {
@@ -175,6 +189,8 @@ export const FALLBACK_EVENTS: Event[] = [
     applyLink: "https://summerofcode.withgoogle.com/",
     price: "Paid (Stipend)",
     isPaid: false,
+    industry: "Open Source / Software",
+    eligibility: "Students & Beginners (18+)",
     coordinates: { lat: 37.4224, lng: -122.0842 }
   }
 ];
