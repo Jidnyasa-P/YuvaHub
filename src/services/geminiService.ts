@@ -61,9 +61,18 @@ export async function fetchEventsAndSchemes(query: string = "", profile?: UserPr
   try {
     const ai = getAiClient();
     
-    // If no AI client (missing key or init error), return fallback immediately
+    // If no AI client (missing key or init error), return fallback with basic local search
     if (!ai) {
-      console.info("API Key not available. Serving high-quality fallback data.");
+      console.info("API Key not available. Serving filtered fallback data.");
+      if (query) {
+        const q = query.toLowerCase();
+        return FALLBACK_EVENTS.filter(e => 
+          e.title.toLowerCase().includes(q) || 
+          e.organization.toLowerCase().includes(q) || 
+          e.description.toLowerCase().includes(q) ||
+          e.industry?.toLowerCase().includes(q)
+        );
+      }
       return FALLBACK_EVENTS;
     }
 
@@ -76,32 +85,32 @@ export async function fetchEventsAndSchemes(query: string = "", profile?: UserPr
     ` : "";
 
     const currentDate = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    const prompt = `Current Date: ${currentDate}. 
-      Find 8-10 ACTIVE corporate hackathons, government schemes, or programs. 
-      ${query ? `PRIORITY FOCUS: Search specifically for "${query}". If "${query}" refers to a specific known program, ensure it is in the results.` : ''}
-      ONLY include events with deadlines AFTER ${currentDate}.
-      ${profileContext}
-      STRICT REQUIREMENT: Return ONLY a JSON array of objects.
-      IMPORTANT: Every object MUST include highly accurate "industry" (e.g. AI, Govt, Finance) and "eligibility" (e.g. Students, Graduates) fields.`;
+    const prompt = `Task: Fetch 8-10 REAL and ACTIVE corporate hackathons, government student schemes, scholarships, or internship programs.
+      Current Date: ${currentDate}.
+      ${query ? `Search Query: "${query}". You MUST prioritize results matching this query. If "${query}" is a specific program, find its latest details.` : 'Provide a diverse mix of popular student opportunities in India.'}
+      Deadline constraint: ONLY include events with deadlines after ${currentDate}.
+      Context: ${profileContext || "Indian students/graduates."}
+      
+      STRICT REQUIREMENT: Return a VALID JSON array of objects. NO conversational text. NO markdown code blocks. NO explanation.`;
 
     const schema = {
       type: Type.ARRAY,
       items: {
         type: Type.OBJECT,
         properties: {
-          id: { type: Type.STRING },
+          id: { type: Type.STRING, description: "Unique slug" },
           title: { type: Type.STRING },
           organization: { type: Type.STRING },
-          type: { type: Type.STRING, description: "hackathon, scheme, or program" },
+          type: { type: Type.STRING, description: "Must be one of: hackathon, scheme, program" },
           description: { type: Type.STRING },
-          location: { type: Type.STRING },
-          date: { type: Type.STRING },
+          location: { type: Type.STRING, description: "e.g. Online, Pan India, or City" },
+          date: { type: Type.STRING, description: "Deadline or Event date" },
           link: { type: Type.STRING },
           applyLink: { type: Type.STRING },
-          price: { type: Type.STRING },
-          isPaid: { type: Type.BOOLEAN },
-          industry: { type: Type.STRING },
-          eligibility: { type: Type.STRING },
+          price: { type: Type.STRING, description: "Free or Amount" },
+          isPaid: { type: Type.BOOLEAN, description: "True if user gets paid (stipend/prize)" },
+          industry: { type: Type.STRING, description: "e.g. AI, Govt, E-commerce, Finance" },
+          eligibility: { type: Type.STRING, description: "Short summary of who can apply" },
           coordinates: {
             type: Type.OBJECT,
             properties: {
@@ -111,7 +120,7 @@ export async function fetchEventsAndSchemes(query: string = "", profile?: UserPr
             required: ["lat", "lng"]
           }
         },
-        required: ["id", "title", "organization", "type", "description", "location", "date", "link", "applyLink", "price", "isPaid", "industry", "eligibility", "coordinates"]
+        required: ["id", "title", "organization", "type", "description", "location", "date", "link", "applyLink", "isPaid", "industry", "eligibility", "coordinates"]
       }
     };
 
@@ -128,7 +137,16 @@ export async function fetchEventsAndSchemes(query: string = "", profile?: UserPr
         },
       });
     } catch (error: any) {
+      console.error("Primary AI Search failed:", error);
       if (error.message?.includes('429') || error.message?.includes('RESOURCE_EXHAUSTED')) {
+        if (query) {
+          const q = query.toLowerCase();
+          return FALLBACK_EVENTS.filter(e => 
+            e.title.toLowerCase().includes(q) || 
+            e.organization.toLowerCase().includes(q) || 
+            e.description.toLowerCase().includes(q)
+          );
+        }
         return FALLBACK_EVENTS;
       }
       // Fallback attempt without tools - optimized for speed

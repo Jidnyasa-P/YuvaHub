@@ -262,25 +262,21 @@ export default function App() {
     try {
       const data = await fetchEventsAndSchemes(searchQuery, profile || undefined);
       if (data && data.length > 0) {
-        // Check if data is from fallback (ids start with fb-)
+        // Fallback detection
         const isFromFallback = data.some(e => e.id.startsWith('fb-'));
         setIsFallback(isFromFallback);
 
-        // Check for new events to notify
+        // Notifications for new data
         if (profile?.notificationsEnabled && events.length > 0) {
           const currentIds = new Set(events.map(e => e.id));
           const newEvents = data.filter(e => !currentIds.has(e.id));
-          
           if (newEvents.length > 0) {
-            addNotification(
-              "New Opportunities!",
-              `We found ${newEvents.length} new events matching your interests.`,
-              "new_event"
-            );
+            addNotification("Update Found!", `We've synced ${newEvents.length} fresh opportunities.`, "new_event");
           }
         }
 
         setEvents(data);
+        setLastServerSearch(searchQuery);
         setLastFetch(now);
         localStorage.setItem('cached_events', JSON.stringify(data));
         localStorage.setItem('last_fetch_time', now.toString());
@@ -726,16 +722,29 @@ export default function App() {
   const industries = useMemo(() => ['all', ...Array.from(new Set(events.map(e => e.industry).filter(Boolean) as string[]))], [events]);
   const eligibilities = useMemo(() => ['all', ...Array.from(new Set(events.map(e => e.eligibility).filter(Boolean) as string[]))], [events]);
 
+  const [lastServerSearch, setLastServerSearch] = useState('');
+
   const filteredEvents = useMemo(() => {
     return events.filter(event => {
+      // If this list of events was JUST fetched for this search query (or similar),
+      // don't apply the strict local string filter, because AI results 
+      // might not contain the exact keyword but are relevant (semantic search).
+      const currentQuery = searchQuery.trim().toLowerCase();
+      const lastQuery = lastServerSearch.trim().toLowerCase();
+      
+      const isAIPerfectMatch = currentQuery !== '' && 
+                             (currentQuery === lastQuery || 
+                              (lastQuery !== '' && currentQuery.startsWith(lastQuery)));
+      
       const title = event.title?.toLowerCase() || "";
       const org = event.organization?.toLowerCase() || "";
       const desc = event.description?.toLowerCase() || "";
       const ind = event.industry?.toLowerCase() || "";
       const elig = event.eligibility?.toLowerCase() || "";
-      const query = searchQuery.toLowerCase();
+      const query = currentQuery;
 
-      const matchesSearch = title.includes(query) ||
+      const matchesSearch = isAIPerfectMatch || 
+                          title.includes(query) ||
                           org.includes(query) ||
                           desc.includes(query) ||
                           ind.includes(query) ||
@@ -748,7 +757,7 @@ export default function App() {
       
       return matchesSearch && matchesType && matchesOrganizer && matchesIndustry && matchesEligibility;
     });
-  }, [events, searchQuery, filterType, selectedOrganizer, selectedIndustry, selectedEligibility]);
+  }, [events, searchQuery, filterType, selectedOrganizer, selectedIndustry, selectedEligibility, lastServerSearch]);
 
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -832,14 +841,34 @@ export default function App() {
 
   const handleSearch = async (e?: React.FormEvent | string) => {
     if (e && typeof e !== 'string') e.preventDefault();
-    const query = typeof e === 'string' ? e : searchQuery;
-    
-    // Direct results only, no AI explanations in search as per instructions
+    const query = (typeof e === 'string' ? e : searchQuery).trim();
+    if (!query) return;
+
+    setSearchQuery(query); // Ensure state matches the query being searched
     setLoading(true);
     setShowSuggestions(false);
+    
+    // Reset advanced filters on new search to ensure results are visible
+    setFilterType('all');
+    setSelectedOrganizer('all');
+    setSelectedIndustry('all');
+    setSelectedEligibility('all');
+    setVisibleCount(6);
+
     try {
       const results = await fetchEventsAndSchemes(query, profile || undefined);
+      
+      // Fallback detection in search
+      const isFromFallback = results.some(e => e.id.startsWith('fb-'));
+      setIsFallback(isFromFallback);
+      
+      if (results.length > 0 && query) {
+        addNotification("Search Results", `AI found ${results.length} results for "${query}"`, "system");
+      }
+      
+      setLastServerSearch(query); // Update this BEFORE setEvents to ensure filter re-runs correctly
       setEvents(results);
+      
       if (results.length === 0) {
         addToast("No Results", "Try broadening your search terms.", "info");
       }
@@ -1219,7 +1248,10 @@ export default function App() {
                     placeholder="Search hackathons, scholarships, domains..."
                     className="w-full pl-16 pr-24 py-6 bg-white border border-slate-200 rounded-[32px] text-lg font-bold placeholder:text-slate-300 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-xl shadow-slate-100/50"
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      if (e.target.value === '') setLastServerSearch('');
+                    }}
                     onFocus={() => setShowSuggestions(true)}
                   />
                   <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
@@ -1349,7 +1381,11 @@ export default function App() {
                     >
                       <Info className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                       <h3 className="text-lg font-black text-slate-900 mb-1">No matches found</h3>
-                      <p className="text-slate-500 text-sm font-medium mb-6 px-4">Try adjusting your filters or search terms to find more opportunities.</p>
+                      <p className="text-slate-500 text-sm font-medium mb-6 px-4">
+                        {isFallback && searchQuery 
+                          ? `AI Search is currently limited (API Offline). No matches found for "${searchQuery}" in our local database.`
+                          : "Try adjusting your filters or search terms to find more opportunities."}
+                      </p>
                       <button 
                         onClick={() => {
                           setSelectedOrganizer('all');
@@ -1357,10 +1393,12 @@ export default function App() {
                           setSelectedEligibility('all');
                           setFilterType('all');
                           setSearchQuery('');
+                          setLastServerSearch('');
+                          loadInitialData(true);
                         }}
                         className="bg-indigo-600 px-6 py-3 rounded-2xl text-xs font-black text-white uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
                       >
-                        Clear All Filters
+                        {isFallback ? 'Default Opportunities' : 'Clear All Filters'}
                       </button>
                     </motion.div>
                   ) : (
