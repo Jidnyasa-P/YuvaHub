@@ -82,6 +82,7 @@ export default function App() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginModalMode, setLoginModalMode] = useState<'login' | 'signup'>('login');
   const [registeringId, setRegisteringId] = useState<string | null>(null);
   const [showConfirmReg, setShowConfirmReg] = useState<Event | null>(null);
   const [showSuccessReg, setShowSuccessReg] = useState<UserRegistration | null>(null);
@@ -954,6 +955,34 @@ export default function App() {
   const renderContent = () => {
     switch (activeTab) {
       case 'recommendations':
+        if (!user) {
+          return (
+            <div className="p-8 h-full flex items-center justify-center">
+              <div className="max-w-md w-full text-center p-12 bg-indigo-50/50 border border-indigo-100 rounded-[40px] shadow-sm">
+                <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center text-indigo-600 mx-auto mb-8 shadow-xl shadow-indigo-100">
+                  <Sparkles className="w-10 h-10" />
+                </div>
+                <h3 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">Personalized for You</h3>
+                <p className="text-slate-500 font-medium mb-10 leading-relaxed">Log in to see opportunities matched specifically to your skills, interests, and profile.</p>
+                <div className="flex flex-col gap-3">
+                  <button 
+                    onClick={() => { setLoginModalMode('login'); setShowLoginModal(true); }}
+                    className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-slate-200"
+                  >
+                    Login to Continue
+                  </button>
+                  <button 
+                    onClick={() => { setLoginModalMode('signup'); setShowLoginModal(true); }}
+                    className="w-full py-4 text-indigo-600 font-black text-[10px] uppercase tracking-widest hover:bg-indigo-50 rounded-2xl transition-all"
+                  >
+                    Create Free Account
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
         return (
           <div className="p-8">
             <header className="mb-10">
@@ -961,7 +990,7 @@ export default function App() {
               <p className="text-slate-500 font-medium max-w-2xl">Based on your profile, we think you'll excel in these opportunities.</p>
             </header>
 
-            {!profile?.onboardingComplete ? (
+            {!profile?.smartMatchOnboarded ? (
               <div className="p-12 text-center bg-indigo-50 rounded-[40px] border border-indigo-100 mb-10">
                 <Sparkles className="w-12 h-12 text-indigo-600 mx-auto mb-4" />
                 <h3 className="text-xl font-black text-slate-900 mb-2">Personalize Your Feed</h3>
@@ -1730,13 +1759,13 @@ export default function App() {
             {!user ? (
               <div className="flex items-center gap-2 sm:gap-3">
                 <button 
-                  onClick={() => setShowLoginModal(true)}
+                  onClick={() => { setLoginModalMode('signup'); setShowLoginModal(true); }}
                   className="hidden sm:block text-indigo-600 text-[10px] font-black uppercase tracking-widest px-4 py-2 hover:bg-indigo-50 rounded-xl transition-all"
                 >
                   Sign Up Free
                 </button>
                 <button 
-                  onClick={() => setShowLoginModal(true)}
+                  onClick={() => { setLoginModalMode('login'); setShowLoginModal(true); }}
                   className="flex items-center gap-2.5 px-6 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 active:scale-95"
                 >
                   <User className="w-4 h-4" />
@@ -1901,7 +1930,7 @@ export default function App() {
 
               {!user && (
                 <button 
-                  onClick={() => { setIsMobileMenuOpen(false); setShowLoginModal(true); }}
+                  onClick={() => { setIsMobileMenuOpen(false); setLoginModalMode('signup'); setShowLoginModal(true); }}
                   className="w-full py-5 bg-slate-900 text-white rounded-[24px] font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-slate-200 mb-2"
                 >
                   Join YuvaHub Free
@@ -1993,7 +2022,9 @@ export default function App() {
       <SuccessModal />
       <DraftViewer />
       <ToastContainer />
-      <LoginModal />
+      <AnimatePresence>
+        {showLoginModal && <LoginModal />}
+      </AnimatePresence>
 
       {/* Floating Toggle for Mobile AI */}
       <button 
@@ -2354,14 +2385,16 @@ export default function App() {
   }
   // Extract other modals to sub-components for better organization
   function LoginModal() {
-    const [isLogin, setIsLogin] = useState(true);
+    const [isLogin, setIsLogin] = useState(loginModalMode === 'login');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
     const [loading, setLoading] = useState(false);
     const [showForgotPassword, setShowForgotPassword] = useState(false);
 
-    if (!showLoginModal) return null;
+    useEffect(() => {
+      setIsLogin(loginModalMode === 'login');
+    }, [loginModalMode]);
 
     const handleEmailAuth = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -2371,9 +2404,19 @@ export default function App() {
           await signInWithEmailAndPassword(auth, email, password);
           addToast("Welcome Back!", "Successfully signed in.", "success");
         } else {
-          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-          await updateProfile(userCredential.user, { displayName: name });
-          addToast("Account Created", "Welcome to YuvaHub!", "success");
+          try {
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            await updateProfile(userCredential.user, { displayName: name });
+            addToast("Account Created", "Welcome to YuvaHub!", "success");
+          } catch (createErr: any) {
+            if (createErr.code === 'auth/email-already-in-use') {
+              addToast("Email Exists", "This email is already registered. Try logging in.", "warning");
+              setIsLogin(true);
+              setLoading(false);
+              return;
+            }
+            throw createErr;
+          }
         }
         setShowLoginModal(false);
       } catch (err: any) {
@@ -2388,7 +2431,7 @@ export default function App() {
       setLoading(true);
       try {
         await signInWithGoogle();
-        addToast("Welcome!", "Successfully signed in with Google.", "success");
+        addToast("Welcome!", "Successfully signed in.", "success");
         setShowLoginModal(false);
       } catch (err: any) {
         console.error("Google login error:", err);
@@ -2417,46 +2460,109 @@ export default function App() {
     };
 
     return (
-      <AnimatePresence>
-        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4">
-          <motion.div 
-            initial={{ opacity: 0 }} 
-            animate={{ opacity: 1 }} 
-            exit={{ opacity: 0 }} 
-            onClick={() => setShowLoginModal(false)} 
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" 
-          />
-          <motion.div 
-            initial={{ scale: 0.9, y: 20, opacity: 0 }} 
-            animate={{ scale: 1, y: 0, opacity: 1 }} 
-            exit={{ scale: 0.9, y: 20, opacity: 0 }} 
-            className="bg-white w-full max-w-md rounded-[40px] shadow-3xl overflow-hidden relative z-10"
-          >
-            <div className="p-8 sm:p-10">
-              <div className="flex justify-between items-center mb-8">
-                <div className="flex items-center gap-3">
-                  <div className="bg-indigo-600 w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
-                    <Sparkles className="text-white w-5 h-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-black tracking-tight text-slate-900">
-                      {showForgotPassword ? 'Reset Password' : (isLogin ? 'Welcome Back' : 'Join YuvaHub')}
-                    </h2>
-                    <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">
-                      {showForgotPassword ? 'Enter your email' : 'Empower your future'}
-                    </p>
+      <div className="fixed inset-0 z-[500] flex items-center justify-center p-4">
+        <motion.div 
+          initial={{ opacity: 0 }} 
+          animate={{ opacity: 1 }} 
+          exit={{ opacity: 0 }} 
+          onClick={() => setShowLoginModal(false)} 
+          className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" 
+        />
+        <motion.div 
+          initial={{ scale: 0.9, y: 20, opacity: 0 }} 
+          animate={{ scale: 1, y: 0, opacity: 1 }} 
+          exit={{ scale: 0.9, y: 20, opacity: 0 }} 
+          className="bg-white w-full max-w-md rounded-[40px] shadow-3xl overflow-hidden relative z-10"
+        >
+          <div className="p-8 sm:p-10">
+            <div className="flex justify-between items-center mb-8">
+              <div className="flex items-center gap-3">
+                <div className="bg-indigo-600 w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
+                  <Sparkles className="text-white w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black tracking-tight text-slate-900">
+                    {showForgotPassword ? 'Reset Password' : (isLogin ? 'Welcome Back' : 'Join YuvaHub')}
+                  </h2>
+                  <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">
+                    {showForgotPassword ? 'Enter your email' : 'Empower your future'}
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowLoginModal(false)}
+                className="p-2 hover:bg-slate-100 rounded-xl transition-colors"
+              >
+                <X className="w-6 h-6 text-slate-400" />
+              </button>
+            </div>
+
+            {showForgotPassword ? (
+              <form onSubmit={handleResetPassword} className="space-y-6">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Email Address</label>
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input 
+                      required
+                      type="email" 
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="your@email.com"
+                      className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold outline-none"
+                    />
                   </div>
                 </div>
                 <button 
-                  onClick={() => setShowLoginModal(false)}
-                  className="p-2 hover:bg-slate-100 rounded-xl transition-colors"
+                  type="submit" 
+                  disabled={loading}
+                  className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-slate-200 hover:bg-slate-800 active:scale-[0.98] transition-all disabled:opacity-50"
                 >
-                  <X className="w-6 h-6 text-slate-400" />
+                  {loading ? 'Sending...' : 'Send Reset Link'}
                 </button>
-              </div>
+                <button 
+                  type="button"
+                  onClick={() => setShowForgotPassword(false)}
+                  className="w-full text-center text-xs font-bold text-slate-400 hover:text-indigo-600 transition-colors"
+                >
+                  Back to Login
+                </button>
+              </form>
+            ) : (
+              <>
+                <button 
+                  onClick={handleGoogleLogin}
+                  disabled={loading}
+                  className="w-full flex items-center justify-center gap-3 py-4 border border-slate-200 rounded-2xl mb-8 group hover:border-indigo-100 hover:bg-indigo-50 transition-all active:scale-[0.98]"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                  </svg>
+                  <span className="text-sm font-bold text-slate-600 group-hover:text-indigo-600">Continue with Google</span>
+                </button>
 
-              {showForgotPassword ? (
-                <form onSubmit={handleResetPassword} className="space-y-6">
+                <div className="relative mb-8">
+                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
+                  <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-4 font-black text-slate-300 tracking-widest">Or with email</span></div>
+                </div>
+
+                <form onSubmit={handleEmailAuth} className="space-y-4">
+                  {!isLogin && (
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Full Name</label>
+                      <div className="relative">
+                        <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input 
+                          required
+                          type="text" 
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          placeholder="John Doe"
+                          className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Email Address</label>
                     <div className="relative">
@@ -2471,120 +2577,54 @@ export default function App() {
                       />
                     </div>
                   </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Password</label>
+                    <div className="relative">
+                      {!loading && <Clock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />}
+                      <input 
+                        required
+                        type="password" 
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button 
+                      type="button" 
+                      onClick={() => setShowForgotPassword(true)}
+                      className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:underline"
+                    >
+                      Forgot Password?
+                    </button>
+                  </div>
+
                   <button 
                     type="submit" 
                     disabled={loading}
                     className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-slate-200 hover:bg-slate-800 active:scale-[0.98] transition-all disabled:opacity-50"
                   >
-                    {loading ? 'Sending...' : 'Send Reset Link'}
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => setShowForgotPassword(false)}
-                    className="w-full text-center text-xs font-bold text-slate-400 hover:text-indigo-600 transition-colors"
-                  >
-                    Back to Login
+                    {loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}
                   </button>
                 </form>
-              ) : (
-                <>
+
+                <p className="mt-8 text-center text-xs font-bold text-slate-400">
+                  {isLogin ? "Don't have an account? " : "Already have an account? "}
                   <button 
-                    onClick={handleGoogleLogin}
-                    disabled={loading}
-                    className="w-full flex items-center justify-center gap-3 py-4 border border-slate-200 rounded-2xl mb-8 group hover:border-indigo-100 hover:bg-indigo-50 transition-all active:scale-[0.98]"
+                    onClick={() => setIsLogin(!isLogin)}
+                    className="text-indigo-600 hover:underline"
                   >
-                    <svg className="w-5 h-5" viewBox="0 0 24 24">
-                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                    </svg>
-                    <span className="text-sm font-bold text-slate-600 group-hover:text-indigo-600">Continue with Google</span>
+                    {isLogin ? 'Sign Up' : 'Log In'}
                   </button>
-
-                  <div className="relative mb-8">
-                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
-                    <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-4 font-black text-slate-300 tracking-widest">Or with email</span></div>
-                  </div>
-
-                  <form onSubmit={handleEmailAuth} className="space-y-4">
-                    {!isLogin && (
-                      <div>
-                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Full Name</label>
-                        <div className="relative">
-                          <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                          <input 
-                            required
-                            type="text" 
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder="John Doe"
-                            className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold outline-none"
-                          />
-                        </div>
-                      </div>
-                    )}
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Email Address</label>
-                      <div className="relative">
-                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input 
-                          required
-                          type="email" 
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          placeholder="your@email.com"
-                          className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold outline-none"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Password</label>
-                      <div className="relative">
-                        <Loader2 className={cn("absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400", !loading && "hidden")} />
-                        {!loading && <Clock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />}
-                        <input 
-                          required
-                          type="password" 
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          placeholder="••••••••"
-                          className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold outline-none"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end">
-                      <button 
-                        type="button" 
-                        onClick={() => setShowForgotPassword(true)}
-                        className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:underline"
-                      >
-                        Forgot Password?
-                      </button>
-                    </div>
-
-                    <button 
-                      type="submit" 
-                      disabled={loading}
-                      className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-slate-200 hover:bg-slate-800 active:scale-[0.98] transition-all disabled:opacity-50"
-                    >
-                      {loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}
-                    </button>
-                  </form>
-
-                  <p className="mt-8 text-center text-xs font-bold text-slate-400">
-                    {isLogin ? "Don't have an account? " : "Already have an account? "}
-                    <button 
-                      onClick={() => setIsLogin(!isLogin)}
-                      className="text-indigo-600 hover:underline"
-                    >
-                      {isLogin ? 'Sign Up' : 'Log In'}
-                    </button>
-                  </p>
-                </>
-              )}
-            </div>
-          </motion.div>
-        </div>
-      </AnimatePresence>
+                </p>
+              </>
+            )}
+          </div>
+        </motion.div>
+      </div>
     );
   }
 
