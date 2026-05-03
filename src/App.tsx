@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo, useCallback, Component, ReactNode, ErrorInfo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, Component, ReactNode, ErrorInfo } from 'react';
 import { 
   Search, MapPin, Bell, BellRing, ExternalLink, Filter, Info, 
   Briefcase, GraduationCap, X, Check, User, Sparkles, TrendingUp,
@@ -13,6 +13,7 @@ import {
   Zap, Copy, Loader2, Users, MessageSquare, Send, Trophy, Star, FileText, AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import Markdown from 'react-markdown';
 import { fetchEventsAndSchemes, getSearchSuggestions, getRelatedDomains, getAssistantResponse, generateDraft, getSmartRefinements } from './services/geminiService';
 import { Event, UserLocation, UserProfile, Notification, UserRegistration, Message, RelatedDomains, ChatMessage, ApplicationStatus } from './types';
 import { cn } from './lib/utils';
@@ -71,6 +72,7 @@ export default function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [apiKeyMissing, setApiKeyMissing] = useState(false);
+  const [showApiWarning, setShowApiWarning] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [subscribing, setSubscribing] = useState(false);
@@ -108,6 +110,24 @@ export default function App() {
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [assistantLoading, setAssistantLoading] = useState(false);
+  const chatMessagesContainerRef = useRef<HTMLDivElement>(null);
+
+  const assistantSuggestions = [
+    "Find hackathons for beginners",
+    "Scholarships for AI/ML students",
+    "Top internships in Bangalore",
+    "How to build a strong resume?",
+    "Government schemes for startups"
+  ];
+
+  useEffect(() => {
+    if (chatMessagesContainerRef.current) {
+      chatMessagesContainerRef.current.scrollTo({
+        top: chatMessagesContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+  }, [chatMessages, assistantLoading]);
   const [draftContent, setDraftContent] = useState<string | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
 
@@ -136,18 +156,18 @@ export default function App() {
 
   // Sub-components
   const SkeletonCard = () => (
-    <div className="bg-white rounded-[40px] p-8 border border-slate-100 shadow-sm overflow-hidden relative">
+    <div className="bg-white border-[3px] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-8 border border-slate-100 shadow-sm overflow-hidden relative">
       <div className="flex justify-between items-start mb-6">
-        <div className="w-24 h-6 bg-slate-100 rounded-xl animate-pulse" />
-        <div className="w-8 h-8 bg-slate-100 rounded-lg animate-pulse" />
+        <div className="w-24 h-6 bg-slate-200 border-2 border-black rounded-none animate-pulse" />
+        <div className="w-8 h-8 bg-slate-200 border-2 border-black rounded-none animate-pulse" />
       </div>
-      <div className="w-full h-8 bg-slate-100 rounded-2xl animate-pulse mb-4" />
-      <div className="w-1/2 h-8 bg-slate-100 rounded-2xl animate-pulse mb-8" />
+      <div className="w-full h-8 bg-slate-200 border-2 border-black rounded-none animate-pulse mb-4" />
+      <div className="w-1/2 h-8 bg-slate-200 border-2 border-black rounded-none animate-pulse mb-8" />
       <div className="flex items-center gap-4 mb-8">
-        <div className="w-24 h-4 bg-slate-100 rounded-lg animate-pulse" />
-        <div className="w-24 h-4 bg-slate-100 rounded-lg animate-pulse" />
+        <div className="w-24 h-4 bg-slate-200 border-2 border-black rounded-none animate-pulse" />
+        <div className="w-24 h-4 bg-slate-200 border-2 border-black rounded-none animate-pulse" />
       </div>
-      <div className="w-full h-14 bg-slate-100 rounded-[24px] animate-pulse" />
+      <div className="w-full h-14 bg-slate-200 border-2 border-black rounded-none animate-pulse" />
       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
     </div>
   );
@@ -1177,57 +1197,52 @@ export default function App() {
               /* Saved Items */
               profile?.bookmarkedEventIds && profile.bookmarkedEventIds.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {/* Tracked Events List */}
                   {events
                     .filter(e => profile.bookmarkedEventIds?.includes(e.id))
                     .map(event => (
-                      <div key={event.id} id={`saved-${event.id}`} />
-                    ))}
-                  {/* Re-using EventCard somehow or just copying UI */}
-                  {events
-                    .filter(e => profile.bookmarkedEventIds?.includes(e.id))
-                    .map(event => (
-                      <div key={event.id} className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm relative group overflow-hidden">
+                      <div key={event.id} className="bg-white p-8 border-[4px] border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] relative group overflow-hidden">
                         <div className="flex justify-between items-start mb-6">
                           <div className={cn(
-                            "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest",
-                            event.type === 'hackathon' ? "bg-indigo-50 text-indigo-600" :
-                            event.type === 'internship' ? "bg-emerald-50 text-emerald-600" :
-                            "bg-amber-50 text-amber-600"
+                            "px-4 py-2 border-2 border-black text-[10px] font-black uppercase tracking-widest shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]",
+                            event.type === 'hackathon' ? "bg-neo-yellow text-black" :
+                            event.type === 'internship' ? "bg-neo-green text-black" :
+                            "bg-neo-pink text-white"
                           )}>
                             {event.type}
                           </div>
                           <button 
                             onClick={() => toggleBookmark(event.id)}
-                            className="text-indigo-600 hover:text-indigo-700"
+                            className="text-black hover:scale-110 transition-transform"
                           >
-                            <Bookmark className="w-5 h-5 fill-current" />
+                            <Bookmark className="w-6 h-6 fill-neo-pink" />
                           </button>
                         </div>
-                        <h4 className="text-xl font-black text-slate-900 leading-tight mb-4">{event.title}</h4>
-                        <div className="flex items-center gap-4 text-xs font-bold text-slate-400 uppercase tracking-widest mb-8">
-                           <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4" /> {event.date}</span>
+                        <h4 className="text-2xl font-black text-black leading-tight mb-4 uppercase tracking-tighter italic">{event.title}</h4>
+                        <div className="flex items-center gap-4 text-[10px] font-black text-black/40 uppercase tracking-widest mb-8">
+                           <span className="flex items-center gap-2 border-b-2 border-black/10"><Calendar className="w-4 h-4" /> {event.date}</span>
                         </div>
                         <button 
                           onClick={() => { setSelectedEvent(event); setShowConfirmReg(event); }}
-                          className="w-full py-4 bg-slate-900 text-white rounded-[24px] font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all"
+                          className="w-full py-5 bg-black text-white brutal-btn font-black text-[10px] uppercase tracking-[0.2em]"
                         >
-                          Details & Apply
+                          Access Intel
                         </button>
                       </div>
                     ))}
                 </div>
               ) : (
-                <div className="text-center py-24 bg-white rounded-[40px] border border-dashed border-slate-200">
-                  <div className="w-20 h-20 bg-indigo-50 rounded-3xl flex items-center justify-center text-indigo-300 mx-auto mb-6">
-                    <Bookmark className="w-10 h-10" />
+                <div className="text-center py-24 bg-white border-[4px] border-black border-dashed">
+                  <div className="w-24 h-24 bg-neo-pink border-4 border-black flex items-center justify-center text-white mx-auto mb-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] rotate-[-6deg]">
+                    <Bookmark className="w-12 h-12" />
                   </div>
-                  <h3 className="text-xl font-black text-slate-900 mb-2">Your Saved List is Empty</h3>
-                  <p className="text-slate-500 font-medium mb-8 max-w-sm mx-auto">Save opportunities you're interested in and view them later here.</p>
+                  <h3 className="text-3xl font-black text-black mb-2 uppercase tracking-tighter italic">Archive Empty</h3>
+                  <p className="text-black/50 font-black text-xs mb-10 max-w-sm mx-auto uppercase tracking-widest leading-relaxed">Your surveillance list has no data. Scout the field for opportunities.</p>
                   <button 
                     onClick={() => setActiveTab('discover')}
-                    className="bg-indigo-600 px-8 py-4 rounded-[24px] text-[10px] font-black text-white uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200"
+                    className="bg-black text-white brutal-btn px-10 py-5 text-[10px] font-black uppercase tracking-[0.2em]"
                   >
-                    Browse Now
+                    Start Patrol
                   </button>
                 </div>
               )
@@ -1237,51 +1252,52 @@ export default function App() {
 
       case 'community':
         return (
-          <div className="p-8">
-            <header className="mb-12">
-              <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2">Community Hall</h2>
-              <p className="text-slate-500 font-medium">Learn from peers and share your own journey.</p>
+          <div className="p-8 lg:p-12 max-w-screen-2xl">
+            <header className="mb-16">
+              <h2 className="text-5xl lg:text-7xl font-black text-black tracking-[-0.04em] leading-none mb-4 uppercase italic">Comm Hall</h2>
+              <p className="text-black font-black uppercase tracking-[0.25em] opacity-40 text-xs">Coalition archives: learn // adapt // conquer.</p>
             </header>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
               <section>
-                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                  <Star className="w-4 h-4 text-amber-500" /> Recent Wins
+                <h3 className="text-[10px] font-black text-black uppercase tracking-[0.3em] mb-8 flex items-center gap-3">
+                  <Star className="w-5 h-5 text-neo-yellow fill-neo-yellow" /> Battlefield Victories
                 </h3>
-                <div className="space-y-4">
+                <div className="space-y-6">
                   {[
-                    { name: 'Aditya S.', win: 'Selected for MLH Fellowship', text: 'YuvaHub helped me find the perfect hackathon to build my portfolio. After 3 months, I finally got selected!', date: '2 days ago' },
-                    { name: 'Priya M.', win: 'Winner at Smart India Hackathon', text: 'The personalized feed showed me SIH just 1 week before the deadline. We won first place @ National level!', date: '1 week ago' },
+                    { name: 'Aditya S.', win: 'MLH Fellowship Scouted', text: 'YuvaHub data points were critical. Secured fellowship deployment after 3 months of tracking.', date: '2 days ago' },
+                    { name: 'Priya M.', win: 'SIH Selection Confirmed', text: 'Detected SIH target 7 days before deadline via feed. National victory achieved.', date: '1 week ago' },
                   ].map((story, idx) => (
-                    <div key={idx} className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-black">
+                    <div key={idx} className="bg-white p-8 border-[4px] border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-16 h-16 bg-neo-yellow/10" />
+                      <div className="flex items-center gap-4 mb-6">
+                        <div className="w-14 h-14 border-2 border-black bg-neo-blue flex items-center justify-center text-white font-black text-xl shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                           {story.name[0]}
                         </div>
                         <div>
-                          <h4 className="font-bold text-slate-900 text-sm">{story.name}</h4>
-                          <p className="text-[10px] text-emerald-600 font-black uppercase">{story.win}</p>
+                          <h4 className="text-lg font-black text-black uppercase tracking-tight italic">{story.name}</h4>
+                          <p className="text-[10px] text-neo-green font-black uppercase tracking-widest">{story.win}</p>
                         </div>
                       </div>
-                      <p className="text-xs text-slate-600 leading-relaxed italic">"{story.text}"</p>
+                      <p className="text-sm text-black leading-relaxed font-black uppercase tracking-tighter opacity-60">"{story.text}"</p>
                     </div>
                   ))}
                 </div>
               </section>
 
               <section>
-                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-indigo-500" /> Join the Discussion
+                <h3 className="text-[10px] font-black text-black uppercase tracking-[0.3em] mb-8 flex items-center gap-3">
+                  <MessageSquare className="w-5 h-5 text-neo-pink" /> Neural Network
                 </h3>
-                <div className="p-8 bg-slate-900 rounded-[40px] text-white overflow-hidden relative group">
+                <div className="p-10 bg-black text-white border-[4px] border-black shadow-[12px_12px_0px_0px_rgba(34,197,94,1)] overflow-hidden relative group">
                   <div className="relative z-10">
-                    <h4 className="text-xl font-black mb-2">Connect with 5k+ Students</h4>
-                    <p className="text-slate-400 text-sm mb-6 max-w-xs">Get help with applications, find teammates, and stay updated via WhatsApp.</p>
-                    <button className="bg-indigo-600 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 active:scale-95">
-                      Join WhatsApp Group
+                    <h4 className="text-4xl font-black mb-4 uppercase tracking-tighter italic leading-none">JOIN THE <span className="text-neo-green">COALITION</span></h4>
+                    <p className="text-white/60 text-xs font-black uppercase tracking-widest mb-10 max-w-xs leading-relaxed">Mobilize with 5.2k units. Data relays, team assembly, and tactical support via decrypted WhatsApp channel.</p>
+                    <button className="bg-neo-green text-black brutal-btn px-8 py-5 text-[10px] font-black uppercase tracking-[0.2em] shadow-none hover:bg-white transition-all">
+                      INFILTRATE WHATSAPP
                     </button>
                   </div>
-                  <Users className="absolute -right-10 -bottom-10 w-48 h-48 text-indigo-500/10 group-hover:rotate-12 transition-transform duration-500" />
+                  <Users className="absolute -right-12 -bottom-12 w-48 h-48 text-white/5 group-hover:rotate-12 transition-transform duration-700" />
                 </div>
               </section>
             </div>
@@ -1290,97 +1306,80 @@ export default function App() {
 
       case 'profile':
         return (
-          <div className="p-8 max-w-4xl">
-            <header className="mb-10">
-              <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2">Account Settings</h2>
-              <p className="text-slate-500 font-medium">Manage your personal data and preferences.</p>
+          <div className="p-8 lg:p-12 max-w-4xl">
+            <header className="mb-12">
+              <h2 className="text-5xl font-black text-black tracking-tighter uppercase italic leading-none mb-4">Command Center</h2>
+              <p className="text-black font-black uppercase tracking-widest text-[10px] opacity-40">User identity // access protocols // system preferences.</p>
             </header>
             
-            {/* Reuse existing profile form logic but styled as a full page */}
-            <div className="bg-white rounded-[40px] border border-slate-100 p-8 shadow-sm">
-              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-8">Personal Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-                <div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Full Name</label>
-                  <input 
-                    type="text" 
-                    value={tempProfile.name || ''}
-                    onChange={(e) => setTempProfile(prev => ({ ...prev, name: e.target.value }))}
-                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold"
-                  />
+            <div className="bg-white border-[4px] border-black p-10 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-12">
+              <section>
+                <h3 className="text-[10px] font-black text-black uppercase tracking-[0.3em] mb-8 border-b-2 border-black inline-block pb-1">Personnel Info</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-4">
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-black uppercase tracking-widest px-1 opacity-50">Full Name</label>
+                    <input 
+                      type="text" 
+                      value={tempProfile.name || ''}
+                      onChange={(e) => setTempProfile(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full brutal-input px-6 py-4 text-sm font-black uppercase tracking-tight"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-black uppercase tracking-widest px-1 opacity-50">Email Address</label>
+                    <input 
+                      type="email" 
+                      value={tempProfile.email || ''}
+                      onChange={(e) => setTempProfile(prev => ({ ...prev, email: e.target.value }))}
+                      disabled={!!user}
+                      className={cn(
+                        "w-full brutal-input px-6 py-4 text-sm font-black tracking-tight",
+                        user ? "bg-slate-50 opacity-40 cursor-not-allowed shadow-none" : "bg-white"
+                      )}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-black uppercase tracking-widest px-1 opacity-50">Educational Base</label>
+                    <input 
+                      type="text" 
+                      value={tempProfile.college || ''}
+                      onChange={(e) => setTempProfile(prev => ({ ...prev, college: e.target.value }))}
+                      className="w-full brutal-input px-6 py-4 text-sm font-black uppercase tracking-tight"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-black uppercase tracking-widest px-1 opacity-50">Comms Logic (Phone)</label>
+                    <input 
+                      type="text" 
+                      value={tempProfile.phone || ''}
+                      onChange={(e) => setTempProfile(prev => ({ ...prev, phone: e.target.value }))}
+                      className="w-full brutal-input px-6 py-4 text-sm font-black tracking-tight"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-black uppercase tracking-widest px-1 opacity-50">Chronology (DOB)</label>
+                    <input 
+                      type="date" 
+                      value={tempProfile.dob || ''}
+                      onChange={(e) => setTempProfile(prev => ({ ...prev, dob: e.target.value }))}
+                      className="w-full brutal-input px-6 py-4 text-sm font-black tracking-tight"
+                    />
+                  </div>
+                  <div className="md:col-span-2 space-y-2">
+                    <label className="block text-[10px] font-black text-black uppercase tracking-widest px-1 opacity-50">Strategic Location (Address)</label>
+                    <input 
+                      type="text" 
+                      value={tempProfile.address || ''}
+                      onChange={(e) => setTempProfile(prev => ({ ...prev, address: e.target.value }))}
+                      className="w-full brutal-input px-6 py-4 text-sm font-black uppercase tracking-tight"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Email</label>
-                  <input 
-                    type="email" 
-                    value={tempProfile.email || ''}
-                    onChange={(e) => setTempProfile(prev => ({ ...prev, email: e.target.value }))}
-                    disabled={!!user}
-                    className={cn(
-                      "w-full px-5 py-4 border border-slate-200 rounded-2xl text-sm font-bold transition-all",
-                      user ? "bg-slate-100 opacity-70 cursor-not-allowed" : "bg-slate-50 focus:bg-white focus:border-indigo-500"
-                    )}
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">College</label>
-                  <input 
-                    type="text" 
-                    value={tempProfile.college || ''}
-                    onChange={(e) => setTempProfile(prev => ({ ...prev, college: e.target.value }))}
-                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Contact Number</label>
-                  <input 
-                    type="text" 
-                    value={tempProfile.phone || ''}
-                    onChange={(e) => setTempProfile(prev => ({ ...prev, phone: e.target.value }))}
-                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Date of Birth</label>
-                  <input 
-                    type="date" 
-                    value={tempProfile.dob || ''}
-                    onChange={(e) => setTempProfile(prev => ({ ...prev, dob: e.target.value }))}
-                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Address</label>
-                  <input 
-                    type="text" 
-                    value={tempProfile.address || ''}
-                    onChange={(e) => setTempProfile(prev => ({ ...prev, address: e.target.value }))}
-                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Location (City)</label>
-                  <input 
-                    type="text" 
-                    value={tempProfile.location || ''}
-                    onChange={(e) => setTempProfile(prev => ({ ...prev, location: e.target.value }))}
-                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Age</label>
-                  <input 
-                    type="number" 
-                    value={tempProfile.age}
-                    onChange={(e) => setTempProfile(prev => ({ ...prev, age: e.target.value === '' ? '' : parseInt(e.target.value) }))}
-                    className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold"
-                  />
-                </div>
-              </div>
+              </section>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-10 mb-10">
+              <section className="grid grid-cols-1 md:grid-cols-2 gap-12 border-t-2 border-black pt-12">
                 <div>
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 px-1">My Skills</h4>
+                  <h4 className="text-[10px] font-black text-black uppercase tracking-[0.3em] mb-6 border-b-2 border-black inline-block pb-1 italic">Tactical Skills</h4>
                   <div className="flex flex-wrap gap-2">
                     {['Frontend', 'Backend', 'Python', 'Design', 'Management', 'Public Speaking', 'Data Analysis', 'Problem Solving'].map(s => (
                       <button 
@@ -1389,7 +1388,10 @@ export default function App() {
                           const skills = tempProfile.skills || [];
                           setTempProfile({ ...tempProfile, skills: skills.includes(s) ? skills.filter(x => x !== s) : [...skills, s] });
                         }}
-                        className={cn("px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all", tempProfile.skills?.includes(s) ? "bg-indigo-600 text-white border-indigo-600" : "bg-slate-50 text-slate-400 border-slate-100")}
+                        className={cn(
+                          "px-4 py-2 border-2 border-black text-[9px] font-black uppercase tracking-widest transition-all", 
+                          tempProfile.skills?.includes(s) ? "bg-neo-blue text-white shadow-none translate-x-[1px] translate-y-[1px]" : "bg-white text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px]"
+                        )}
                       >
                         {s}
                       </button>
@@ -1397,7 +1399,7 @@ export default function App() {
                   </div>
                 </div>
                 <div>
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 px-1">Areas of Interest</h4>
+                  <h4 className="text-[10px] font-black text-black uppercase tracking-[0.3em] mb-6 border-b-2 border-black inline-block pb-1 italic">Intel Focus</h4>
                   <div className="flex flex-wrap gap-2">
                     {['AI/ML', 'Blockchain', 'Cybersecurity', 'Sustainable Devel.', 'Govt. Schemes', 'Internships', 'Social Impact'].map(d => (
                       <button 
@@ -1406,67 +1408,70 @@ export default function App() {
                           const domains = tempProfile.preferredDomains || [];
                           setTempProfile({ ...tempProfile, preferredDomains: domains.includes(d) ? domains.filter(x => x !== d) : [...domains, d] });
                         }}
-                        className={cn("px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all", tempProfile.preferredDomains?.includes(d) ? "bg-indigo-600 text-white border-indigo-600" : "bg-slate-50 text-slate-400 border-slate-100")}
+                        className={cn(
+                          "px-4 py-2 border-2 border-black text-[9px] font-black uppercase tracking-widest transition-all", 
+                          tempProfile.preferredDomains?.includes(d) ? "bg-neo-yellow text-black shadow-none translate-x-[1px] translate-y-[1px]" : "bg-white text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px]"
+                        )}
                       >
                         {d}
                       </button>
                     ))}
                   </div>
                 </div>
-              </div>
+              </section>
 
-              <div className="mb-10 p-6 bg-slate-50 rounded-3xl border border-slate-100">
-                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6 px-1">Preferences</h3>
-                <div className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
-                  <div className="flex items-start gap-4">
-                    <div className="p-2.5 bg-indigo-50 rounded-xl text-indigo-600">
+              <section className="bg-neo-yellow/10 border-2 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.1)]">
+                <h3 className="text-[10px] font-black text-black uppercase tracking-[0.3em] mb-6 italic">Signal Configuration</h3>
+                <div className="flex items-center justify-between p-6 bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="flex items-start gap-5">
+                    <div className="p-3 bg-neo-pink text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                       <BellRing className="w-5 h-5" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-black text-slate-900 mb-0.5">Opportunity Notifications</h4>
-                      <p className="text-[10px] text-slate-500 font-medium">Get alerted about new schemes, hackathons, and deadline reminders.</p>
+                      <h4 className="text-sm font-black text-black uppercase tracking-tighter italic">Opportunity Pings</h4>
+                      <p className="text-[9px] text-black/50 font-black uppercase tracking-widest leading-relaxed mt-1">Real-time alerts for schemes, hackathons, and deadlines.</p>
                     </div>
                   </div>
                   <button 
                     onClick={() => setTempProfile(prev => ({ ...prev, notificationsEnabled: !prev.notificationsEnabled }))}
                     className={cn(
-                      "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none",
-                      tempProfile.notificationsEnabled ? "bg-indigo-600" : "bg-slate-200"
+                      "relative inline-flex h-8 w-14 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-colors focus:outline-none",
+                      tempProfile.notificationsEnabled ? "bg-neo-green" : "bg-white"
                     )}
                   >
                     <span
                       className={cn(
-                        "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
-                        tempProfile.notificationsEnabled ? "translate-x-6" : "translate-x-1"
+                        "inline-block h-6 w-6 transform border border-black bg-white transition-transform",
+                        tempProfile.notificationsEnabled ? "translate-x-6" : "translate-x-0"
                       )}
                     />
                   </button>
                 </div>
-              </div>
+              </section>
 
-              <div className="flex items-center justify-between pt-6 border-t border-slate-100">
+              <div className="flex items-center justify-between pt-10 border-t-2 border-black">
                 {user ? (
                   <button 
                     onClick={handleSignOut}
-                    className="text-red-500 text-xs font-black uppercase tracking-widest hover:bg-red-50 px-4 py-2 rounded-xl transition-colors"
+                    className="text-neo-pink text-[10px] font-black uppercase tracking-[0.2em] border-2 border-neo-pink px-6 py-4 hover:bg-neo-pink hover:text-white transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.1)]"
                   >
-                    Logout
+                    Terminate Session
                   </button>
                 ) : (
                   <button 
                     onClick={() => setShowLoginModal(true)}
-                    className="flex items-center gap-2 text-indigo-600 text-xs font-black uppercase tracking-widest hover:bg-indigo-50 px-4 py-2 rounded-xl transition-colors"
+                    className="flex items-center gap-3 text-neo-blue border-2 border-neo-blue text-[10px] font-black uppercase tracking-[0.2em] px-6 py-4 hover:bg-neo-blue hover:text-white transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.1)]"
                   >
                     <User className="w-4 h-4" />
-                    Sign In
+                    Initiate Access
                   </button>
                 )}
                 <button 
                   onClick={handleSaveProfile}
                   disabled={isUpdating}
-                  className="bg-slate-900 text-white px-8 py-4 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all disabled:opacity-50"
+                  className="bg-black text-white brutal-btn px-10 py-5 text-[10px] font-black uppercase tracking-[0.3em] disabled:opacity-50"
                 >
-                  {isUpdating ? 'Saving...' : 'Save Changes'}
+                  {isUpdating ? 'Uploading Data...' : 'Commit Changes'}
                 </button>
               </div>
             </div>
@@ -1478,40 +1483,57 @@ export default function App() {
           <div className="p-6 lg:p-10 max-w-screen-2xl mx-auto">
             {/* Existing Hero & Search */}
             <header className="mb-12">
-              {apiKeyMissing && (
-                <div className="mb-6 p-4 bg-amber-50 border border-amber-100 rounded-3xl flex items-start gap-4 shadow-sm">
-                  <div className="p-2 bg-amber-100 rounded-xl text-amber-600">
-                    <AlertTriangle className="w-5 h-5" />
+              {apiKeyMissing && showApiWarning && (
+                <div className="mb-10 p-8 bg-neo-yellow border-[4px] border-black shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden group">
+                  <div className="flex items-start gap-6 relative z-10">
+                    <div className="w-14 h-14 bg-white border-2 border-black flex items-center justify-center text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                      <Sparkles className="w-7 h-7" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="text-xl font-black text-black mb-1 uppercase tracking-tighter italic">Engine Offline: AI Disabled</h4>
+                      <p className="text-xs text-black font-black leading-relaxed max-w-xl uppercase tracking-widest opacity-70">
+                        Smart match algorithm requires authentication. Infiltrate the environment by providing GEMINI_API_KEY.
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-sm font-black text-amber-900 mb-0.5 uppercase tracking-tight">AI Offline / Limited Experience</h4>
-                    <p className="text-xs text-amber-700 font-medium leading-relaxed">
-                      YuvaHub's smart features require an API key. We're currently showing high-quality fallback opportunities.
-                      <span className="block mt-1 font-black opacity-60">Add GEMINI_API_KEY to your settings to enable full AI search and assistance.</span>
-                    </p>
+                  <div className="mt-8 flex items-center gap-4 relative z-10">
+                    <button 
+                      onClick={() => setShowApiWarning(false)}
+                      className="px-6 py-4 bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-black text-[10px] uppercase tracking-widest hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all"
+                    >
+                      Ignore Intel
+                    </button>
+                    <button 
+                      onClick={() => addToast("Protocol", "Insert credentials in the Settings matrix.", "info")}
+                      className="px-8 py-4 bg-black text-white brutal-btn font-black text-[10px] uppercase tracking-[0.2em]"
+                    >
+                      Initialize Key
+                    </button>
                   </div>
                 </div>
               )}
-              <div className="flex items-center gap-3 mb-6">
-                <div className="flex items-center gap-2.5 px-4 py-2 bg-white border border-slate-100 rounded-2xl shadow-sm">
-                  <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse", statusColor)} />
-                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                    Live Feed • Updated {getRelativeTime(lastRefreshed)}
+              <div className="flex items-center gap-4 mb-8">
+                <div className="flex items-center gap-3 px-6 py-3 bg-white border-[3px] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                  <div className={cn("w-2.5 h-2.5 rounded-none border border-black animate-pulse", statusColor)} />
+                  <span className="text-[10px] font-black text-black uppercase tracking-[0.25em]">
+                    Live Stream // Synchronized: {getRelativeTime(lastRefreshed)}
                   </span>
                   <button 
                     onClick={handleRefreshFeed}
                     disabled={isUpdating}
-                    className="p-1 hover:text-indigo-600 transition-colors disabled:opacity-50"
+                    className="p-1 text-black hover:bg-black hover:text-white border-black transition-all disabled:opacity-50"
                   >
-                    <RefreshCw className={cn("w-3 h-3", isUpdating && "animate-spin")} />
+                    <RefreshCw className={cn("w-4 h-4", isUpdating && "animate-spin")} />
                   </button>
                 </div>
               </div>
-              <h2 className="text-4xl lg:text-5xl font-black text-slate-900 tracking-tighter max-w-2xl leading-[1.1] mb-8">
-                The next big <span className="text-indigo-600 underline decoration-indigo-200 underline-offset-8">opportunity</span> is waiting for you.
-              </h2>
+              <div className="mb-12 max-w-3xl">
+                 <h2 className="text-5xl lg:text-7xl font-black text-black tracking-[-0.04em] leading-[0.9] uppercase italic">
+                   CLAIM YOUR <span className="text-neo-pink underline decoration-[8px] decoration-black underline-offset-[12px] not-italic">FUTURE</span> NOW.
+                 </h2>
+              </div>
 
-              <div className="max-w-2xl relative group">
+              <div className="max-w-2xl relative group mb-12">
                 <div className="relative">
                   <div className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors">
                     {isSearching ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
@@ -1519,7 +1541,7 @@ export default function App() {
                   <input 
                     type="text" 
                     placeholder="Search hackathons, scholarships, domains..."
-                    className="w-full pl-16 pr-32 py-6 bg-white border border-slate-200 rounded-[32px] text-lg font-bold placeholder:text-slate-300 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-xl shadow-slate-100/50"
+                    className="w-full pl-16 pr-32 py-6 brutal-input text-lg font-black placeholder:text-black/30"
                     value={searchQuery}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
@@ -1540,14 +1562,14 @@ export default function App() {
                     {searchQuery && (
                       <button 
                         onClick={() => setSearchQuery('')}
-                        className="p-2 text-slate-400 hover:text-slate-600 transition-colors"
+                        className="p-2 text-black/40 hover:text-black transition-colors"
                       >
-                        <X className="w-4 h-4" />
+                        <X className="w-5 h-5" />
                       </button>
                     )}
                   <button 
                     onClick={() => handleSearch()}
-                    className="bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-slate-800 transition-all active:scale-95 shadow-lg shadow-slate-200"
+                    className="brutal-btn bg-black text-white px-6 py-3 text-sm font-black uppercase tracking-widest"
                   >
                     Search
                   </button>
@@ -1556,18 +1578,19 @@ export default function App() {
                 
                 {/* AI Refinements */}
                 {smartRefinements.length > 0 && !loading && (
-                  <div className="flex flex-wrap gap-2 mt-4 px-2">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest self-center mr-2">Refine Search:</span>
+                  <div className="flex flex-wrap gap-3 mt-8 px-2">
+                    <span className="text-[10px] font-black text-black uppercase tracking-[0.2em] self-center mr-2 italic border-b-2 border-black">Refined Intel:</span>
                     {smartRefinements.map((ref, idx) => (
-                      <button
+                      <button 
                         key={idx}
                         onClick={() => {
                           setSearchQuery(ref);
                           handleSearch(ref);
                           setSmartRefinements([]);
                         }}
-                        className="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-bold border border-indigo-100 hover:bg-indigo-100 transition-all"
+                        className="px-5 py-2 bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] text-[10px] font-black uppercase tracking-widest hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] transition-all flex items-center gap-2 group"
                       >
+                        <Zap className="w-3 h-3 text-neo-yellow group-hover:scale-125 transition-transform" />
                         {ref}
                       </button>
                     ))}
@@ -1578,34 +1601,36 @@ export default function App() {
                 <AnimatePresence>
                   {showSuggestions && (recentSearches.length > 0 || searchQuery.length > 0) && (
                     <motion.div 
-                      className="absolute top-full left-0 right-0 mt-4 bg-white border border-slate-100 rounded-3xl shadow-2xl p-4 z-[100] suggestions-dropdown overflow-hidden"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 10 }}
+                      className="absolute top-full left-0 right-0 mt-6 bg-white border-[4px] border-black shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] p-6 z-[100] suggestions-dropdown overflow-hidden"
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
                     >
                       {searchQuery.length === 0 && recentSearches.length > 0 && (
-                        <div className="mb-4">
-                           <div className="px-4 py-2 flex items-center justify-between">
-                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Recent Searches</span>
-                             <button onClick={() => { setRecentSearches([]); localStorage.removeItem('recent_searches'); }} className="text-[10px] font-bold text-indigo-500 hover:underline">Clear All</button>
+                        <div className="mb-8">
+                           <div className="flex items-center justify-between mb-4 px-2">
+                             <span className="text-[10px] font-black text-black uppercase tracking-[0.2em] italic border-b-2 border-black">Recent Logs</span>
+                             <button onClick={() => { setRecentSearches([]); localStorage.removeItem('recent_searches'); }} className="text-[10px] font-black text-neo-pink uppercase hover:underline">Flush Logs</button>
                            </div>
-                           {recentSearches.map((s, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => { setSearchQuery(s); handleSearch(s); }}
-                                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 rounded-2xl text-left text-sm font-bold text-slate-600 transition-colors"
-                              >
-                                <Clock className="w-4 h-4 text-slate-300 shrink-0" />
-                                {s}
-                              </button>
-                            ))}
+                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                             {recentSearches.map((s, idx) => (
+                                <button
+                                  key={idx}
+                                  onClick={() => { setSearchQuery(s); handleSearch(s); }}
+                                  className="flex items-center gap-4 px-5 py-3 border-2 border-black bg-white hover:bg-neo-yellow shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] text-left text-xs font-black uppercase tracking-tight transition-all"
+                                >
+                                  <Clock className="w-4 h-4 text-black/30 shrink-0" />
+                                  {s}
+                                </button>
+                              ))}
+                           </div>
                         </div>
                       )}
 
-                      <div className="px-4 py-2">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Trending Opportunities</span>
+                      <div className="mb-4 px-2">
+                        <span className="text-[10px] font-black text-black uppercase tracking-[0.2em] italic border-b-2 border-black">System Recommended Targets</span>
                       </div>
-                      <div className="p-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {[
                           "Google Summer of Code", 
                           "DAAD Scholarship", 
@@ -1615,17 +1640,15 @@ export default function App() {
                           "Tata Imagination Challenge",
                           "HDFC Badhte Kadam",
                           "Stanford University Scholarship",
-                          "Flipkart GRiD",
-                          "Adobe Women in Tech Scholarship"
                         ].map((s, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => { setSearchQuery(s); handleSearch(s); }}
-                            className="flex items-center gap-3 px-4 py-3 hover:bg-indigo-50 rounded-2xl text-left text-[11px] font-bold text-slate-600 transition-colors"
-                          >
-                            <TrendingUp className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                            {s}
-                          </button>
+                           <button
+                             key={idx}
+                             onClick={() => { setSearchQuery(s); handleSearch(s); }}
+                             className="flex items-center gap-4 px-5 py-3 border-2 border-black bg-white hover:bg-neo-blue hover:text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[1px] hover:translate-y-[1px] text-left text-xs font-black uppercase tracking-tight transition-all"
+                           >
+                             <Zap className="w-4 h-4 text-neo-yellow group-hover:scale-125 transition-transform shrink-0" />
+                             {s}
+                           </button>
                         ))}
                       </div>
                     </motion.div>
@@ -1639,30 +1662,30 @@ export default function App() {
                {filterType !== 'all' && (
                   <button 
                     onClick={() => setFilterType('all')}
-                    className="flex items-center gap-2.5 px-5 py-3 bg-indigo-600 text-white rounded-[24px] text-[10px] font-black uppercase tracking-widest whitespace-nowrap shadow-xl shadow-indigo-100 shrink-0"
+                    className="flex items-center gap-2.5 px-5 py-3 brutal-btn bg-neo-pink text-white text-[10px] font-black uppercase tracking-widest whitespace-nowrap shrink-0"
                   >
                     <X className="w-3.5 h-3.5" />
                     Reset
                   </button>
                 )}
               {[
-                { id: 'all', label: 'All Fields', icon: LayoutGrid },
-                { id: 'hackathon', label: 'Hackathons', icon: Sparkles },
-                { id: 'scheme', label: 'Scholarships', icon: GraduationCap },
-                { id: 'program', label: 'Mentorships', icon: Briefcase },
-                { id: 'internship', label: 'Internships', icon: ExternalLink },
+                { id: 'all', label: 'All', icon: LayoutGrid, color: 'bg-neo-yellow' },
+                { id: 'hackathon', label: 'Hackathons', icon: Sparkles, color: 'bg-neo-blue' },
+                { id: 'scheme', label: 'Scholarships', icon: GraduationCap, color: 'bg-neo-green' },
+                { id: 'program', label: 'Mentorships', icon: Briefcase, color: 'bg-neo-violet' },
+                { id: 'internship', label: 'Internships', icon: ExternalLink, color: 'bg-neo-pink' },
               ].map((type) => (
                 <button
                   key={type.id}
                   onClick={() => setFilterType(type.id as any)}
                   className={cn(
-                    "flex items-center gap-3 px-6 py-3.5 rounded-[24px] text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border shrink-0",
+                    "flex items-center gap-3 px-6 py-3.5 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-2 border-black shrink-0",
                     filterType === type.id 
-                      ? "bg-slate-900 text-white border-slate-900 shadow-xl shadow-slate-200" 
-                      : "bg-white text-slate-400 border-slate-50 hover:border-slate-200 hover:text-slate-600"
+                      ? type.color + " text-black shadow-none translate-x-[2px] translate-y-[2px]" 
+                      : "bg-white text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]"
                   )}
                 >
-                  <type.icon className={cn("w-3.5 h-3.5", filterType === type.id ? "text-indigo-400" : "text-slate-300")} />
+                  <type.icon className={cn("w-3.5 h-3.5", filterType === type.id ? "text-black" : "text-black/30")} />
                   {type.label}
                 </button>
               ))}
@@ -1680,22 +1703,22 @@ export default function App() {
                       }
                     }}
                     className={cn(
-                      "flex items-center gap-2.5 px-6 py-3.5 rounded-full text-xs font-black uppercase tracking-widest transition-all border whitespace-nowrap group relative overflow-hidden",
+                      "flex items-center gap-3 px-8 py-4 border-[3px] border-black text-[10px] font-black uppercase tracking-[0.2em] transition-all whitespace-nowrap group relative overflow-hidden",
                       isSmartRankEnabled
-                        ? "bg-indigo-600 text-white border-indigo-600 shadow-xl shadow-indigo-100"
-                        : "bg-white text-slate-400 border-slate-200 hover:border-slate-300"
+                        ? "bg-neo-blue text-white shadow-none translate-x-[2px] translate-y-[2px]"
+                        : "bg-white text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]"
                     )}
                   >
-                    <div className="relative z-10 flex items-center gap-2.5">
-                      <Zap className={cn("w-4 h-4", isSmartRankEnabled ? "fill-current" : "")} />
+                    <div className="relative z-10 flex items-center gap-3">
+                      <Zap className={cn("w-4 h-4", isSmartRankEnabled ? "fill-white" : "fill-current")} />
                       {isSmartRankEnabled ? (
                         <>
-                          <span className="flex items-center gap-2">
-                            Smart Match Active
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          <span className="flex items-center gap-3 italic">
+                            Smart Sync Active
+                            <span className="w-2 h-2 bg-neo-green border border-black animate-pulse" />
                           </span>
                         </>
-                      ) : 'Smart Match Off'}
+                      ) : 'Activate Smart Sync'}
                     </div>
                   </button>
                   <div className="group relative">
@@ -1711,38 +1734,37 @@ export default function App() {
               )}
             </div>
 
-            {/* Advanced Filters */}
-            <div className="flex flex-wrap items-center gap-3 mb-10 p-6 bg-white rounded-[32px] border border-slate-100 shadow-sm">
-              <div className="flex flex-col gap-1.5 min-w-[200px] flex-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Organizer</label>
+            <div className="mt-12 flex flex-wrap items-center gap-6 mb-12 p-8 bg-white border-[4px] border-black shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
+              <div className="flex flex-col gap-2 min-w-[200px] flex-1">
+                <label className="text-[10px] font-black text-black uppercase tracking-widest px-1">Source</label>
                 <select 
                   value={selectedOrganizer}
                   onChange={(e) => setSelectedOrganizer(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-xs font-bold focus:ring-2 focus:ring-indigo-500/10 outline-none"
+                  className="w-full bg-white brutal-input px-4 py-3 text-xs font-black uppercase"
                 >
-                  {organizers.map(o => <option key={o} value={o}>{o === 'all' ? 'All Organizations' : o}</option>)}
+                  {organizers.map(o => <option key={o} value={o}>{o === 'all' ? 'All Units' : o}</option>)}
                 </select>
               </div>
 
-              <div className="flex flex-col gap-1.5 min-w-[200px] flex-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Industry</label>
+              <div className="flex flex-col gap-2 min-w-[200px] flex-1">
+                <label className="text-[10px] font-black text-black uppercase tracking-widest px-1">Sector</label>
                 <select 
                   value={selectedIndustry}
                   onChange={(e) => setSelectedIndustry(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-xs font-bold focus:ring-2 focus:ring-indigo-500/10 outline-none"
+                  className="w-full bg-white brutal-input px-4 py-3 text-xs font-black uppercase"
                 >
-                  {industries.map(i => <option key={i} value={i}>{i === 'all' ? 'All Industries' : i}</option>)}
+                  {industries.map(i => <option key={i} value={i}>{i === 'all' ? 'All Sectors' : i}</option>)}
                 </select>
               </div>
 
-              <div className="flex flex-col gap-1.5 min-w-[200px] flex-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Eligibility</label>
+              <div className="flex flex-col gap-2 min-w-[200px] flex-1">
+                <label className="text-[10px] font-black text-black uppercase tracking-widest px-1">Security Clearance</label>
                 <select 
                   value={selectedEligibility}
                   onChange={(e) => setSelectedEligibility(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-xs font-bold focus:ring-2 focus:ring-indigo-500/10 outline-none"
+                  className="w-full bg-white brutal-input px-4 py-3 text-xs font-black uppercase"
                 >
-                  {eligibilities.map(el => <option key={el} value={el}>{el === 'all' ? 'All Eligibility' : el}</option>)}
+                  {eligibilities.map(el => <option key={el} value={el}>{el === 'all' ? 'Universal' : el}</option>)}
                 </select>
               </div>
 
@@ -1753,9 +1775,9 @@ export default function App() {
                   setSelectedEligibility('all');
                   setFilterType('all');
                 }}
-                className="mt-6 px-4 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500 transition-colors"
+                className="self-end px-6 py-4 border-2 border-neo-pink text-[10px] font-black text-neo-pink uppercase tracking-widest hover:bg-neo-pink hover:text-white transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,0.1)] hover:shadow-none"
               >
-                Reset
+                Flush System
               </button>
             </div>
 
@@ -1773,14 +1795,16 @@ export default function App() {
                       key="no-results"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      className="col-span-full py-20 text-center bg-white rounded-[40px] border border-dashed border-slate-200"
+                      className="col-span-full py-24 text-center bg-white border-[4px] border-black border-dashed shadow-[12px_12px_0px_0px_rgba(0,0,0,0.05)]"
                     >
-                      <Info className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                      <h3 className="text-lg font-black text-slate-900 mb-1">No matches found</h3>
-                      <p className="text-slate-500 text-sm font-medium mb-6 px-4">
+                      <div className="w-20 h-20 bg-neo-yellow border-4 border-black mx-auto mb-8 flex items-center justify-center rotate-12 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                        <Info className="w-10 h-10 text-black" />
+                      </div>
+                      <h3 className="text-3xl font-black text-black mb-2 uppercase tracking-tighter italic">No Target Found</h3>
+                      <p className="text-black/50 text-xs font-black mb-10 px-8 leading-relaxed uppercase tracking-widest max-w-xl mx-auto">
                         {isFallback && searchQuery 
-                          ? `AI Search is currently limited (API Offline). No matches found for "${searchQuery}" in our local database.`
-                          : "Try adjusting your filters or search terms to find more opportunities."}
+                          ? `Protocol limited. Local archives do not contain data regarding "${searchQuery}".`
+                          : "Recalibrate your search parameters. The network is vast, but these coordinates are empty."}
                       </p>
                       <button 
                         onClick={() => {
@@ -1792,9 +1816,9 @@ export default function App() {
                           setLastServerSearch('');
                           loadInitialData(true);
                         }}
-                        className="bg-indigo-600 px-6 py-3 rounded-2xl text-xs font-black text-white uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                        className="bg-black text-white brutal-btn px-10 py-5 text-[10px] font-black uppercase tracking-[0.2em]"
                       >
-                        {isFallback ? 'Default Opportunities' : 'Clear All Filters'}
+                        {isFallback ? 'Restore Default' : 'System Purge'}
                       </button>
                     </motion.div>
                   ) : (
@@ -1819,10 +1843,10 @@ export default function App() {
                 {filteredEvents.length > visibleCount && (
                    <button 
                     onClick={() => setVisibleCount(prev => prev + 6)}
-                    className="col-span-full py-8 mt-4 text-slate-400 hover:text-indigo-600 font-black text-xs uppercase tracking-[0.2em] flex flex-col items-center gap-3 transition-colors group"
+                    className="col-span-full py-12 mt-8 brutal-btn bg-white text-black hover:bg-neo-yellow flex flex-col items-center gap-4 group mx-auto w-full max-w-sm"
                    >
-                     <RefreshCw className="w-6 h-6 group-hover:rotate-180 transition-transform duration-700" />
-                     Load More Opportunities
+                     <RefreshCw className="w-8 h-8 group-hover:rotate-180 transition-transform duration-1000" />
+                     <span className="text-sm font-black uppercase tracking-widest">Deploy More Intel</span>
                    </button>
                 )}
               </div>
@@ -1833,52 +1857,44 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-900 flex flex-col">
+    <div className="min-h-screen bg-neo-yellow/10 font-sans text-black selection:bg-neo-yellow selection:text-black flex flex-col">
       {/* Sticky Top Header */}
-      <header className="sticky top-0 z-[100] w-full bg-white/80 backdrop-blur-xl border-b border-slate-100 h-20 flex items-center shrink-0">
+      <header className="sticky top-0 z-[100] w-full bg-white border-b-[3px] border-black h-20 flex items-center shrink-0">
         <div className="max-w-screen-2xl mx-auto w-full px-6 flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-3 cursor-pointer group" onClick={() => handleTabChange('discover')}>
-            <div className="bg-indigo-600 w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200 group-hover:scale-110 transition-transform">
-              <Sparkles className="text-white w-5 h-5" />
+            <div className="bg-neo-yellow border-2 border-black w-10 h-10 flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] group-hover:translate-x-[1px] group-hover:translate-y-[1px] group-hover:shadow-none transition-all">
+              <Sparkles className="text-black w-5 h-5" />
             </div>
             <div className="hidden sm:block">
-              <h1 className="text-xl font-black tracking-tighter text-slate-900 leading-none">YuvaHub</h1>
-              <p className="text-[10px] uppercase tracking-widest font-black text-indigo-500 mt-1">Student Platform</p>
+              <h1 className="text-xl font-black tracking-tighter text-black leading-none">YuvaHub</h1>
+              <p className="text-[10px] uppercase tracking-widest font-black text-black/50 mt-1">Student Platform</p>
             </div>
           </div>
 
           {/* Main Nav (Center) - Desktop */}
-          <nav className="hidden md:flex items-center gap-1 bg-slate-50 p-1.5 rounded-[22px] border border-slate-100">
+          <nav className="hidden md:flex items-center gap-1 bg-white p-1 rounded-none border-[3px] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             {[
-              { id: 'discover', label: 'Discover', sub: 'All Opportunities', icon: Globe },
-              { id: 'recommendations', label: 'For You', sub: 'Matched Items', icon: Sparkles, badge: !hasVisitedForYou ? 'New' : null },
+              { id: 'discover', label: 'Explore', sub: 'New feeds', icon: Globe, color: 'bg-neo-yellow' },
+              { id: 'recommendations', label: 'For You', sub: 'Smart Picks', icon: Sparkles, badge: !hasVisitedForYou ? 'New' : null, color: 'bg-neo-green' },
+              { id: 'assistant', label: 'Ask AI', sub: 'Chat Assit', icon: MessageSquare, isAssistant: true, color: 'bg-neo-pink' },
             ].map((item) => (
               <button
                 key={item.id}
-                onClick={() => handleTabChange(item.id as any)}
+                onClick={() => item.isAssistant ? setIsAssistantOpen(true) : handleTabChange(item.id as any)}
                 title={item.sub}
                 className={cn(
-                  "relative flex items-center gap-2.5 px-5 py-2.5 rounded-[18px] transition-all group overflow-hidden",
-                  activeTab === item.id 
-                    ? "bg-white text-indigo-600 shadow-sm" 
-                    : "text-slate-500 hover:text-slate-900"
+                  "relative flex items-center gap-2.5 px-5 py-2 transition-all group overflow-hidden border-r-2 border-black last:border-r-0",
+                  activeTab === item.id && !item.isAssistant
+                    ? item.color + " text-black" 
+                    : "text-black/60 hover:bg-slate-50"
                 )}
               >
-                <item.icon className={cn("w-4 h-4", activeTab === item.id ? "text-indigo-600" : "text-slate-400 group-hover:text-slate-900")} />
+                <item.icon className={cn("w-4 h-4", activeTab === item.id && !item.isAssistant ? "text-black" : "text-black/40 group-hover:text-black")} />
                 <div className="text-left">
-                  <p className="font-black text-xs leading-none mb-0.5">{item.label}</p>
-                  <p className="text-[8px] uppercase tracking-widest font-medium opacity-50">{item.sub}</p>
+                  <p className="font-black text-[10px] leading-none mb-0.5">{item.label}</p>
+                  <p className="text-[7px] uppercase tracking-widest font-black opacity-50">{item.sub}</p>
                 </div>
-                {item.badge && (
-                  <motion.span 
-                    animate={{ scale: [1, 1.1, 1] }} 
-                    transition={{ repeat: Infinity, duration: 2 }}
-                    className="absolute top-1 right-1 bg-indigo-600 text-white text-[6px] font-black uppercase px-1 rounded-full"
-                  >
-                    {item.badge}
-                  </motion.span>
-                )}
               </button>
             ))}
           </nav>
@@ -1889,13 +1905,13 @@ export default function App() {
               <div className="flex items-center gap-2 sm:gap-3">
                 <button 
                   onClick={() => { setLoginModalMode('signup'); setShowLoginModal(true); }}
-                  className="hidden sm:block text-indigo-600 text-[10px] font-black uppercase tracking-widest px-4 py-2 hover:bg-indigo-50 rounded-xl transition-all"
+                  className="hidden sm:block text-black text-[10px] font-black uppercase tracking-widest px-4 py-2 hover:underline"
                 >
                   Sign Up Free
                 </button>
                 <button 
                   onClick={() => { setLoginModalMode('login'); setShowLoginModal(true); }}
-                  className="flex items-center gap-2.5 px-6 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 active:scale-95"
+                  className="brutal-btn flex items-center gap-2.5 px-6 py-3 bg-neo-yellow text-black text-[10px] font-black uppercase tracking-widest"
                 >
                   <User className="w-4 h-4" />
                   <span>Login</span>
@@ -1905,26 +1921,26 @@ export default function App() {
               <div className="flex items-center gap-3">
                 <button 
                   onClick={() => setShowNotifications(true)}
-                  className="relative p-3 bg-slate-50 text-slate-500 rounded-2xl border border-slate-100 hover:border-indigo-200 hover:text-indigo-600 transition-all"
+                  className="relative p-3 bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-none transition-all"
                 >
                   <Bell className="w-5 h-5" />
                   {notifications.some(n => !n.read) && (
-                    <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-indigo-600 rounded-full border-2 border-white" />
+                    <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-neo-pink border-2 border-black rounded-full" />
                   )}
                 </button>
                 <button 
                   onClick={() => setActiveTab('profile')}
                   className={cn(
-                    "flex items-center gap-3 pl-2 pr-3 py-2 rounded-2xl border transition-all",
-                    activeTab === 'profile' ? "bg-indigo-50 border-indigo-200" : "bg-white border-slate-100 hover:border-slate-300"
+                    "flex items-center gap-3 pl-2 pr-3 py-2 border-2 border-black transition-all",
+                    activeTab === 'profile' ? "bg-neo-blue text-white shadow-none translate-x-[2px] translate-y-[2px]" : "bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:shadow-none transition-all"
                   )}
                 >
-                  <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-100 overflow-hidden">
+                  <div className="w-8 h-8 border-2 border-black bg-neo-pink flex items-center justify-center text-white shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
                     {user.photoURL ? <img src={user.photoURL} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <User className="w-4 h-4" />}
                   </div>
                   <div className="hidden lg:block text-left">
-                    <p className="text-[10px] font-black text-slate-900 uppercase">My Profile</p>
-                    <p className="text-[9px] font-bold text-slate-400 -mt-0.5 max-w-[80px] truncate">{user.displayName || user.email}</p>
+                    <p className="text-[10px] font-black text-black uppercase">My Profile</p>
+                    <p className="text-[9px] font-bold text-black/40 -mt-0.5 max-w-[80px] truncate">{user.displayName || user.email}</p>
                   </div>
                 </button>
               </div>
@@ -1933,7 +1949,7 @@ export default function App() {
             {/* Mobile Menu Toggle */}
             <button 
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden p-3 bg-slate-100 text-slate-900 rounded-2xl hover:bg-slate-200 transition-colors"
+              className="md:hidden p-4 bg-white text-black border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all"
             >
               {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
@@ -1943,75 +1959,75 @@ export default function App() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar - Desktop (Secondary Nav) */}
-        <aside className="hidden lg:flex w-72 bg-white border-r border-slate-100 flex-col shrink-0 overflow-y-auto">
+        <aside className="hidden lg:flex w-72 bg-white border-r-[3px] border-black flex-col shrink-0 overflow-y-auto">
           <div className="p-8 pt-6">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 px-4">Dashboard</h3>
+            <h3 className="text-[10px] font-black text-black uppercase tracking-widest mb-6 px-4">Dashboard</h3>
             <nav className="space-y-1.5">
               {[
-                { id: 'tracker', label: 'My Tracker', icon: Calendar, sub: 'Applied & Saved' },
-                { id: 'community', label: 'Community', icon: Users, sub: 'Connect & Discuss' },
-                { id: 'profile', label: 'Settings', icon: Settings, sub: 'Account Privacy' },
+                { id: 'discover', label: 'Discover', icon: Globe, sub: 'Explore all', color: 'bg-neo-yellow' },
+                { id: 'assistant', label: 'AI Assistant', icon: Sparkles, sub: 'Instant help', isAssistant: true, color: 'bg-neo-pink' },
+                { id: 'tracker', label: 'My Tracker', icon: Calendar, sub: 'Applied & Saved', color: 'bg-neo-green' },
+                { id: 'community', label: 'Community', icon: Users, sub: 'Connect & Discuss', color: 'bg-neo-blue' },
+                { id: 'profile', label: 'Settings', icon: Settings, sub: 'Account Privacy', color: 'bg-neo-violet' },
               ].map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => handleTabChange(item.id as any)}
+                  onClick={() => item.isAssistant ? setIsAssistantOpen(true) : handleTabChange(item.id as any)}
                   className={cn(
-                    "w-full flex items-center gap-3 px-5 py-4 rounded-2xl transition-all group",
-                    activeTab === item.id 
-                      ? "bg-indigo-50 text-indigo-600 shadow-sm" 
-                      : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+                    "w-full flex items-center gap-3 px-5 py-4 transition-all group border-2 border-black",
+                    activeTab === item.id && !item.isAssistant 
+                      ? item.color + " translate-x-[4px] translate-y-[4px] shadow-none" 
+                      : "bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                   )}
                 >
-                  <item.icon className={cn("w-5 h-5", activeTab === item.id ? "text-indigo-600" : "text-slate-400 group-hover:text-slate-600")} />
+                  <item.icon className={cn("w-5 h-5", activeTab === item.id && !item.isAssistant ? "text-black" : "text-black/40 group-hover:text-black")} />
                   <div className="text-left">
-                    <p className="font-bold text-sm tracking-tight">{item.label}</p>
-                    <p className="text-[9px] font-bold text-slate-400 mt-0.5">{item.sub}</p>
+                    <p className="font-black text-sm tracking-tight">{item.label}</p>
+                    <p className="text-[9px] font-bold text-black/40 mt-0.5">{item.sub}</p>
                   </div>
                 </button>
               ))}
             </nav>
 
-            <div className="mt-12 bg-indigo-50 rounded-3xl p-6 border border-indigo-100/50">
-              <div className="bg-indigo-600 w-10 h-10 rounded-xl flex items-center justify-center text-white mb-4 shadow-lg shadow-indigo-200">
-                <Trophy className="w-5 h-5" />
+            <div className="mt-12 bg-neo-yellow border-[3px] border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-20 h-20 bg-black/5 rotate-45 transform translate-x-10 -translate-y-10" />
+              <div className="bg-white w-14 h-14 border-2 border-black flex items-center justify-center text-black mb-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] group-hover:rotate-12 transition-transform">
+                <Trophy className="w-7 h-7" />
               </div>
-              <h4 className="text-sm font-black text-indigo-900 mb-2 leading-tight">Win ₹50K Prizes</h4>
-              <p className="text-[10px] font-medium text-indigo-700 leading-relaxed mb-4">Participate in our monthly hackathons and build your portfolio.</p>
+              <h4 className="text-xl font-black text-black mb-2 uppercase tracking-tighter italic leading-none">Win ₹50K Bounty</h4>
+              <p className="text-[10px] font-black text-black/60 uppercase tracking-widest leading-relaxed mb-6">Deploy your skills in monthly operations. Build your legacy.</p>
               <button 
                 onClick={() => { handleTabChange('discover'); setFilterType('hackathon'); }}
-                className="w-full py-2.5 bg-white text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-colors shadow-sm"
+                className="w-full py-5 bg-black text-white brutal-btn text-[10px] font-black uppercase tracking-[0.2em] shadow-none"
               >
-                Join Now
+                Infiltrate Now
               </button>
             </div>
           </div>
 
           <div className="mt-auto p-6">
-            <div className="bg-indigo-600 h-[240px] rounded-[40px] p-8 relative overflow-hidden group shadow-2xl shadow-indigo-200">
+            <div className="bg-neo-blue border-[4px] border-black h-[280px] p-10 relative overflow-hidden group shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]">
                <div className="absolute top-0 right-0 p-8">
-                 <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-md">
-                   <TrendingUp className="w-8 h-8 text-white opacity-40" />
+                 <div className="w-16 h-16 bg-white border-2 border-black flex items-center justify-center shadow-[4px_4px_00x_0px_rgba(0,0,0,1)]">
+                    <TrendingUp className="w-8 h-8 text-black" />
                  </div>
                </div>
               <div className="relative z-10 h-full flex flex-col">
-                <div className="flex items-center gap-2 mb-4">
-                   <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
-                   <p className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em]">Weekly Insight</p>
+                <div className="flex items-center gap-3 mb-6">
+                   <div className="w-3 h-3 bg-neo-green border border-black animate-pulse" />
+                   <p className="text-[10px] font-black text-white uppercase tracking-[0.3em]">Operational Protocol</p>
                 </div>
-                <h4 className="text-white font-black text-xl leading-tight mb-auto">
-                   AI research grants are peak trending in IITs right now.
+                <h4 className="text-white font-black text-2xl uppercase tracking-tighter leading-[1.1] mb-auto italic">
+                   India's premier node for student intelligence & strategic scaling.
                 </h4>
                 <button 
-                  onClick={() => {
-                    setAssistantInput("Tell me more about the AI research grants trending in IITs.");
-                    setIsAssistantOpen(true);
-                  }}
-                  className="w-full bg-white text-indigo-600 py-4 rounded-[24px] text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl shadow-indigo-900/20"
+                  onClick={() => handleTabChange('discover')}
+                  className="w-full bg-white text-black border-2 border-black py-5 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-neo-yellow transition-all shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]"
                 >
-                  Explore Insight
+                  Acquire Targets
                 </button>
               </div>
-              <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-indigo-500 rounded-full blur-3xl opacity-50" />
+              <div className="absolute -bottom-20 -right-20 w-60 h-60 bg-black/10 rounded-full group-hover:scale-150 transition-transform duration-1000" />
             </div>
           </div>
         </aside>
@@ -2031,38 +2047,38 @@ export default function App() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsMobileMenuOpen(false)}
-              className="fixed inset-0 z-[150] bg-slate-900/40 backdrop-blur-sm md:hidden"
+              className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm md:hidden"
             />
             <motion.div 
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 z-[160] bg-white rounded-t-[40px] p-8 border-t border-slate-100 shadow-2xl md:hidden flex flex-col gap-6"
+              className="fixed bottom-0 left-0 right-0 z-[160] bg-white border-t-[6px] border-black p-8 md:hidden flex flex-col gap-8 shadow-[0px_-20px_0px_0px_rgba(0,0,0,0.1)]"
             >
-              <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-2" />
+              <div className="w-16 h-2 bg-black border border-white rounded-none mx-auto mb-2 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" />
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-6">
                 {[
                   { id: 'discover', label: 'Discover', icon: Globe, sub: 'Explore all' },
-                  { id: 'recommendations', label: 'For You', icon: Sparkles, sub: 'Relevant picks' },
                   { id: 'tracker', label: 'Tracker', icon: Calendar, sub: 'Save events' },
                   { id: 'community', label: 'Community', icon: Users, sub: 'Social space' },
+                  { id: 'profile', label: 'Settings', icon: User, sub: 'Manage identity' },
                 ].map((item) => (
                   <button
                     key={item.id}
-                    onClick={() => handleTabChange(item.id as any)}
+                    onClick={() => { handleTabChange(item.id as any); setIsMobileMenuOpen(false); }}
                     className={cn(
-                      "flex flex-col items-center justify-center p-6 rounded-[32px] transition-all gap-2.5 border",
+                      "flex flex-col items-center justify-center p-8 border-[4px] border-black transition-all gap-4 relative overflow-hidden group",
                       activeTab === item.id 
-                        ? "bg-indigo-600 text-white border-indigo-600 shadow-xl shadow-indigo-200" 
-                        : "bg-slate-50 text-slate-500 border-slate-100"
+                        ? "bg-neo-blue text-white shadow-none translate-x-[2px] translate-y-[2px]" 
+                        : "bg-white text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
                     )}
                   >
-                    <item.icon className="w-6 h-6" />
+                    <item.icon className={cn("w-10 h-10", activeTab === item.id ? "text-white" : "text-black")} />
                     <div className="text-center">
-                      <p className="text-xs font-black uppercase tracking-tighter">{item.label}</p>
-                      <p className={cn("text-[8px] font-bold opacity-60", activeTab === item.id ? "text-white" : "text-slate-400")}>{item.sub}</p>
+                      <p className="text-xs font-black uppercase tracking-widest">{item.label}</p>
+                      <p className={cn("text-[9px] font-black opacity-30 mt-1 uppercase", activeTab === item.id ? "text-white" : "text-black")}>{item.sub}</p>
                     </div>
                   </button>
                 ))}
@@ -2071,9 +2087,9 @@ export default function App() {
               {!user && (
                 <button 
                   onClick={() => { setIsMobileMenuOpen(false); setLoginModalMode('signup'); setShowLoginModal(true); }}
-                  className="w-full py-5 bg-slate-900 text-white rounded-[24px] font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-slate-200 mb-2"
+                  className="w-full py-6 bg-black text-white brutal-btn font-black text-xs uppercase tracking-[0.2em]"
                 >
-                  Join YuvaHub Free
+                  Join the Coalition
                 </button>
               )}
             </motion.div>
@@ -2090,64 +2106,112 @@ export default function App() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsAssistantOpen(false)}
-              className="fixed inset-0 z-[200] bg-slate-900/20 backdrop-blur-sm"
+              className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-sm"
             />
             <motion.div 
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
-              className="fixed right-0 top-0 bottom-0 z-[210] w-full max-w-md bg-white shadow-2xl flex flex-col"
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed right-0 top-0 bottom-0 z-[300] w-full max-w-lg bg-white border-l-[4px] border-black shadow-2xl flex flex-col"
             >
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-indigo-600 text-white">
-                <div className="flex items-center gap-3">
-                  <Sparkles className="w-5 h-5" />
-                  <h2 className="font-black text-lg tracking-tight">YuvaHub AI</h2>
+              <div className="p-6 border-b-[4px] border-black flex items-center justify-between bg-neo-pink text-black relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-8 opacity-10">
+                  <Sparkles className="w-40 h-40" />
                 </div>
-                <button onClick={() => setIsAssistantOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                  <X className="w-5 h-5" />
+                <div className="flex items-center gap-3 relative z-10">
+                  <div className="w-12 h-12 bg-white border-2 border-black flex items-center justify-center shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                    <Sparkles className="w-6 h-6 text-black" />
+                  </div>
+                  <div>
+                    <h2 className="font-black text-2xl tracking-tight leading-none mb-1">YuvaHub AI</h2>
+                    <p className="text-[10px] font-black text-black/60 uppercase tracking-[0.2em]">Always Helpful</p>
+                  </div>
+                </div>
+                <button onClick={() => setIsAssistantOpen(false)} className="relative z-10 p-2 hover:bg-black hover:text-white border-2 border-black transition-all">
+                  <X className="w-6 h-6" />
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/50">
+              <div 
+                ref={chatMessagesContainerRef}
+                className="flex-1 overflow-y-auto p-6 space-y-6 bg-orange-50/20 no-scrollbar pb-20"
+              >
                 {chatMessages.length === 0 && (
-                  <div className="text-center py-10 opacity-50">
-                    <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                    <p className="text-xs font-bold uppercase tracking-widest">Ask me anything about student opportunities!</p>
+                  <div className="py-10">
+                    <div className="text-center mb-10">
+                      <div className="w-20 h-20 bg-neo-yellow border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center text-black mx-auto mb-6">
+                        <MessageSquare className="w-10 h-10" />
+                      </div>
+                      <h3 className="text-2xl font-black text-black mb-2 tracking-tight">How can I help you?</h3>
+                      <p className="text-black/60 font-bold text-sm max-w-xs mx-auto">I can help you find opportunities, draft applications, and plan your career path.</p>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-black text-black/40 uppercase tracking-widest px-2 mb-2">Suggested Questions</p>
+                      {assistantSuggestions.map((suggestion) => (
+                        <button
+                          key={suggestion}
+                          onClick={() => handleAssistantChat(undefined, suggestion)}
+                          className="w-full text-left p-4 bg-white border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] text-sm font-black text-black hover:bg-neo-yellow hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-all flex items-center justify-between group"
+                        >
+                          {suggestion}
+                          <ArrowRight className="w-4 h-4" />
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
                 {chatMessages.map((msg) => (
-                  <div key={msg.id} className={cn(
-                    "max-w-[85%] p-4 rounded-2xl text-sm font-medium leading-relaxed shadow-sm",
-                    msg.role === 'user' 
-                      ? "bg-slate-900 text-white ml-auto" 
-                      : "bg-white text-slate-700 border border-slate-100"
-                  )}>
-                    {msg.content}
-                  </div>
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    key={msg.id} 
+                    className={cn(
+                      "max-w-[90%] p-5 text-sm font-black leading-relaxed border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]",
+                      msg.role === 'user' 
+                        ? "bg-neo-yellow text-black ml-auto" 
+                        : "bg-white text-black prose prose-indigo max-w-none"
+                    )}
+                  >
+                    {msg.role === 'assistant' ? (
+                       <div className="markdown-body">
+                         <Markdown>{msg.content}</Markdown>
+                       </div>
+                    ) : msg.content}
+                  </motion.div>
                 ))}
                 {assistantLoading && (
-                  <div className="bg-white border border-slate-100 p-4 rounded-2xl animate-pulse flex gap-2">
-                    <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" />
-                    <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce delay-100" />
-                    <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce delay-200" />
+                  <div className="bg-white border-2 border-black p-5 w-20 flex gap-1 justify-center shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                    <div className="w-2 h-2 bg-black rounded-full animate-bounce" />
+                    <div className="w-2 h-2 bg-black rounded-full animate-bounce [animation-delay:0.2s]" />
+                    <div className="w-2 h-2 bg-black rounded-full animate-bounce [animation-delay:0.4s]" />
                   </div>
                 )}
               </div>
 
-              <form onSubmit={handleAssistantChat} className="p-6 border-t border-slate-100 bg-white">
-                <div className="relative">
+              <div className="p-6 border-t-[4px] border-black bg-white">
+                <form onSubmit={handleAssistantChat} className="relative">
                   <input 
                     type="text" 
-                    placeholder="Ask about hackathons, internships..."
-                    className="w-full pl-6 pr-14 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all text-sm font-bold"
+                    placeholder="Message YuvaHub AI..."
+                    className="w-full pl-6 pr-14 py-5 bg-white brutal-input text-sm font-black"
                     value={assistantInput}
                     onChange={(e) => setAssistantInput(e.target.value)}
+                    disabled={assistantLoading}
                   />
-                  <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors">
-                    <Send className="w-4 h-4" />
+                  <button 
+                    type="submit" 
+                    disabled={!assistantInput.trim() || assistantLoading}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-12 h-12 bg-black text-white border-2 border-black flex items-center justify-center hover:bg-neo-pink hover:text-black transition-all disabled:opacity-50"
+                  >
+                    <Send className="w-5 h-5" />
                   </button>
+                </form>
+                <div className="mt-4 text-center">
+                   <p className="text-[10px] font-black text-black/30 uppercase tracking-[0.2em]">Powered by Gemini</p>
                 </div>
-              </form>
+              </div>
             </motion.div>
           </>
         )}
@@ -2183,37 +2247,37 @@ export default function App() {
         {draftContent && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setDraftContent('')} className="fixed inset-0 z-[400] bg-slate-900/40 backdrop-blur-md" />
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[410] w-full max-w-2xl bg-white rounded-[40px] shadow-3xl overflow-hidden flex flex-col max-h-[80vh]">
-              <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[410] w-full max-w-2xl bg-white border-[4px] border-black shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] overflow-hidden flex flex-col max-h-[85vh]">
+              <div className="p-8 border-b-[4px] border-black flex items-center justify-between bg-neo-yellow">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl"><FileText className="w-5 h-5" /></div>
-                  <h3 className="text-xl font-black text-slate-900 tracking-tight">AI Generated Draft</h3>
+                  <div className="p-2 bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] text-black"><FileText className="w-5 h-5" /></div>
+                  <h3 className="text-2xl font-black text-black tracking-tight uppercase italic">Target: Application Draft</h3>
                 </div>
-                <button onClick={() => setDraftContent('')} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X className="w-5 h-5 text-slate-400" /></button>
+                <button onClick={() => setDraftContent('')} className="p-2 border-2 border-black hover:bg-black hover:text-white transition-all"><X className="w-5 h-5" /></button>
               </div>
-              <div className="flex-1 overflow-y-auto p-10">
-                <div className="bg-amber-50 border border-amber-100 rounded-2xl p-6 mb-8 flex gap-4">
-                   <AlertCircle className="w-6 h-6 text-amber-600 shrink-0" />
+              <div className="flex-1 overflow-y-auto p-10 bg-orange-50/10">
+                <div className="bg-neo-pink text-white border-2 border-black p-6 mb-8 flex gap-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                   <AlertCircle className="w-6 h-6 shrink-0" />
                    <div>
-                     <p className="text-sm font-bold text-amber-900 mb-1">Important Disclaimer</p>
-                     <p className="text-xs text-amber-700 leading-relaxed font-medium">This is an AI-generated template. You MUST customize it with your specific achievements, experiences, and tone before submitting. AI content alone may be flagged by reviewers.</p>
+                     <p className="text-sm font-black uppercase tracking-widest mb-1">Warning: User Action Required</p>
+                     <p className="text-xs leading-relaxed font-bold uppercase opacity-80">This is an AI blueprint. You MUST personalize this data before infiltration. Non-customized content will be detected.</p>
                    </div>
                 </div>
-                <div className="whitespace-pre-wrap text-sm text-slate-700 leading-relaxed font-medium font-serif bg-slate-50 p-8 rounded-3xl border border-slate-100 italic">
+                <div className="whitespace-pre-wrap text-sm text-black leading-relaxed font-black font-mono bg-white p-8 border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
                   {draftContent}
                 </div>
               </div>
-              <div className="p-8 border-t border-slate-100 flex gap-3">
+              <div className="p-8 border-t-[4px] border-black flex gap-4 bg-white">
                 <button 
                   onClick={() => {
                     navigator.clipboard.writeText(draftContent);
-                    addToast("Copied to Clipboard", "You can now paste it into your application.", "success");
+                    addToast("Data Secured", "Template copied to clipboard. Deploy as needed.", "success");
                   }}
-                  className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-slate-200"
+                  className="flex-1 py-5 bg-black text-white brutal-btn font-black text-xs uppercase tracking-[0.2em]"
                 >
-                  Copy Text
+                  Acquire Text
                 </button>
-                <button onClick={() => setDraftContent('')} className="flex-1 py-4 bg-white border border-slate-200 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest">Close</button>
+                <button onClick={() => setDraftContent('')} className="flex-1 py-5 bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] text-black font-black text-xs uppercase tracking-widest transition-all">Abort</button>
               </div>
             </motion.div>
           </>
@@ -2228,20 +2292,20 @@ export default function App() {
     const isBookmarked = profile?.bookmarkedEventIds?.includes(event.id);
 
     return (
-      <div id={`event-${event.id}`} className="bg-white rounded-[40px] border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl hover:border-indigo-100 transition-all group flex flex-col h-full active:scale-[0.98]">
+      <div id={`event-${event.id}`} className="brutal-card flex flex-col h-full active:scale-[0.98] group">
         <div className="p-8 pb-4 flex-1">
           <div className="flex justify-between items-start mb-6">
             <div className="flex items-center gap-2">
               <span className={cn(
-                "px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border",
-                event.type === 'hackathon' ? "bg-indigo-50 text-indigo-600 border-indigo-100" :
-                event.type === 'scheme' ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
-                "bg-amber-50 text-amber-600 border-amber-100"
+                "px-3 py-1 text-[9px] font-black uppercase tracking-widest border-2 border-black",
+                event.type === 'hackathon' ? "bg-neo-yellow text-black" :
+                event.type === 'scheme' ? "bg-neo-green text-black" :
+                "bg-neo-pink text-white"
               )}>
                 {event.type}
               </span>
               {!event.isPaid && (
-                <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter">
+                <span className="bg-white border-2 border-black text-black px-2 py-0.5 text-[8px] font-black uppercase tracking-tighter">
                   Free
                 </span>
               )}
@@ -2252,7 +2316,7 @@ export default function App() {
                   e.stopPropagation();
                   handleAssistantChat(undefined, `Help me write a statement of purpose (SOP) for ${event.title} organized by ${event.organization}.`);
                 }}
-                className="p-2.5 rounded-xl transition-all shadow-sm border bg-slate-50 text-slate-500 hover:border-indigo-200 hover:text-indigo-600"
+                className="p-2.5 transition-all border-2 border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-neo-blue transition-colors"
                 title="Draft SOP with AI"
               >
                 <FileText className="w-4 h-4" />
@@ -2260,8 +2324,8 @@ export default function App() {
               <button 
                 onClick={(e) => { e.stopPropagation(); toggleBookmark(event.id); }}
                 className={cn(
-                  "p-2.5 rounded-xl transition-all shadow-sm border",
-                  isBookmarked ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-400 border-slate-100 hover:border-indigo-200 hover:text-indigo-600"
+                  "p-2.5 transition-all border-2 border-black",
+                  isBookmarked ? "bg-black text-white shadow-none" : "bg-white text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-neo-pink"
                 )}
               >
                 {isBookmarked ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
@@ -2269,35 +2333,23 @@ export default function App() {
             </div>
           </div>
 
-          <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1.5">{event.organization}</p>
-          <h3 className="text-xl font-black text-slate-900 leading-[1.2] mb-3 group-hover:text-indigo-600 transition-colors">
+          <p className="text-[10px] font-black text-black/60 uppercase tracking-widest mb-1.5">{event.organization}</p>
+          <h3 className="text-xl font-black text-black leading-[1.2] mb-3 group-hover:underline transition-all">
             {event.title}
           </h3>
-          <p className="text-xs text-slate-500 font-medium leading-relaxed mb-6 line-clamp-3">
+          <p className="text-xs text-black/70 font-bold leading-relaxed mb-6 line-clamp-3">
             {event.description}
           </p>
 
           <div className="space-y-2.5 mb-6">
-            <div className="flex items-center gap-2.5 text-xs font-bold text-slate-400 group-hover:text-slate-600 transition-colors">
-              <Calendar className="w-3.5 h-3.5 text-indigo-500" />
+            <div className="flex items-center gap-2.5 text-xs font-black text-black/60">
+              <Calendar className="w-3.5 h-3.5" />
               <span>Ends {event.date}</span>
             </div>
-            <div className="flex items-center gap-2.5 text-xs font-bold text-slate-400 group-hover:text-slate-600 transition-colors">
-              <MapPin className="w-3.5 h-3.5 text-indigo-500" />
+            <div className="flex items-center gap-2.5 text-xs font-black text-black/60">
+              <MapPin className="w-3.5 h-3.5" />
               <span className="truncate">{event.location}</span>
             </div>
-            {event.industry && (
-              <div className="flex items-center gap-2.5 text-xs font-bold text-indigo-500/70">
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span>{event.industry}</span>
-              </div>
-            )}
-            {event.eligibility && (
-              <div className="flex items-center gap-2.5 text-xs font-bold text-emerald-500/70">
-                <Users className="w-3.5 h-3.5" />
-                <span>{event.eligibility}</span>
-              </div>
-            )}
           </div>
         </div>
 
@@ -2306,40 +2358,25 @@ export default function App() {
             <button 
               onClick={() => directRegister(event)}
               className={cn(
-                "flex-1 flex items-center justify-center gap-2 px-6 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg",
+                "flex-1 brutal-btn flex items-center justify-center gap-2 px-6 py-4 text-[11px] font-black uppercase tracking-widest",
                 isRegistered 
-                  ? "bg-slate-100 text-slate-500 cursor-not-allowed" 
-                  : "bg-slate-900 text-white hover:bg-slate-800 shadow-slate-200"
+                  ? "bg-black/10 text-black/40 shadow-none translate-x-[3px] translate-y-[3px]" 
+                  : "bg-neo-yellow text-black"
               )}
               disabled={isRegistered}
             >
-              <Zap className={cn("w-4 h-4", isRegistered ? "text-slate-300" : "text-indigo-400 fill-current")} />
+              <Zap className={cn("w-4 h-4", isRegistered ? "text-black/20" : "fill-black")} />
               {isRegistered ? 'Registered' : 'Apply Fast'}
             </button>
             <a 
               href={event.link}
               target="_blank"
               rel="noopener noreferrer"
-              className="p-4 bg-white border border-slate-100 text-slate-400 rounded-2xl hover:text-indigo-600 hover:border-indigo-100 hover:bg-slate-50 transition-all active:scale-90 shadow-sm"
+              className="p-4 bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all"
               title="Official Site"
             >
               <ExternalLink className="w-4 h-4" />
             </a>
-          </div>
-          
-          <div className="mt-4 flex items-center justify-between border-t border-slate-50 pt-4">
-            <div className="flex gap-0.5 text-amber-400">
-               {[...Array(5)].map((_, i) => <Star key={i} className="w-3 h-3 fill-current" />)}
-            </div>
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                handleAssistantChat(undefined, `Write a short statement of purpose (SOP) for "${event.title}".`);
-              }}
-              className="text-[10px] font-black text-slate-400 uppercase hover:text-indigo-600 transition-colors"
-            >
-              Draft SOP
-            </button>
           </div>
         </div>
       </div>
@@ -2386,22 +2423,22 @@ export default function App() {
           initial={{ scale: 0.9, y: 20, opacity: 0 }} 
           animate={{ scale: 1, y: 0, opacity: 1 }} 
           exit={{ scale: 0.9, y: 20, opacity: 0 }}
-          className="bg-white w-full max-w-md rounded-[40px] p-10 relative shadow-2xl overflow-hidden border border-slate-100"
+          className="bg-white w-full max-w-md border-[4px] border-black p-10 relative shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] overflow-hidden"
         >
           <div className="flex items-center justify-between mb-8">
-            <div className="flex gap-1.5">
+            <div className="flex gap-2">
                {[1, 2, 3].map(s => (
-                 <div key={s} className={cn("h-1.5 rounded-full transition-all duration-500", s === step ? "bg-indigo-600 w-8" : s < step ? "bg-indigo-200 w-4" : "bg-slate-100 w-4")} />
+                 <div key={s} className={cn("h-3 border-2 border-black transition-all duration-500", s === step ? "bg-neo-pink w-10" : s < step ? "bg-neo-green w-4" : "bg-white w-4")} />
                ))}
             </div>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{step}/3</span>
+            <span className="text-[10px] font-black text-black uppercase tracking-[0.2em]">{step}/3</span>
           </div>
 
           <AnimatePresence mode="wait">
             {step === 1 && (
               <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                <h3 className="text-2xl font-black text-slate-900 mb-2 leading-tight">What interests you?</h3>
-                <p className="text-sm font-medium text-slate-500 mb-8">Select domains you want to discover opportunities in.</p>
+                <h3 className="text-3xl font-black text-black mb-2 tracking-tighter uppercase italic">Interested?</h3>
+                <p className="text-sm font-black text-black/50 mb-8 uppercase tracking-widest leading-relaxed">Select domains you want to dominate.</p>
                 <div className="flex flex-wrap gap-2 mb-10">
                   {INTERESTS.map(interest => (
                     <button
@@ -2411,8 +2448,8 @@ export default function App() {
                         setData({ ...data, interests: current.includes(interest) ? current.filter(i => i !== interest) : [...current, interest] });
                       }}
                       className={cn(
-                        "px-4 py-2.5 rounded-2xl text-xs font-bold border transition-all",
-                        data.interests?.includes(interest) ? "bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100" : "bg-slate-50 text-slate-500 border-slate-100 hover:border-slate-200"
+                        "px-4 py-2 text-xs font-black border-2 border-black transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]",
+                        data.interests?.includes(interest) ? "bg-neo-yellow text-black shadow-none translate-x-[1px] translate-y-[1px]" : "bg-white text-black hover:bg-neo-pink"
                       )}
                     >
                       {interest}
@@ -2424,37 +2461,37 @@ export default function App() {
 
             {step === 2 && (
               <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
-                <h3 className="text-2xl font-black text-slate-900 mb-2 leading-tight">Tell us about your studies</h3>
+                <h3 className="text-3xl font-black text-black mb-2 tracking-tighter uppercase italic">Studies</h3>
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Year</label>
+                      <label className="text-[10px] font-black text-black uppercase tracking-widest px-1">Year</label>
                       <select 
                         value={data.yearOfStudy} 
                         onChange={e => setData({ ...data, yearOfStudy: e.target.value })}
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500/10 outline-none"
+                        className="w-full bg-white brutal-input px-4 py-4 text-sm font-black"
                       >
                         <option value="">Select Year</option>
                         {['1st Year', '2nd Year', '3rd Year', '4th Year+', 'Masters', 'PhD'].map(y => <option key={y} value={y}>{y}</option>)}
                       </select>
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Degree</label>
+                      <label className="text-[10px] font-black text-black uppercase tracking-widest px-1">Degree</label>
                       <input 
                         placeholder="e.g. B.Tech"
                         value={data.degree} 
                         onChange={e => setData({ ...data, degree: e.target.value })}
-                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500/10 outline-none"
+                        className="w-full bg-white brutal-input px-4 py-4 text-sm font-black"
                       />
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">College / University</label>
+                    <label className="text-[10px] font-black text-black uppercase tracking-widest px-1">University</label>
                     <input 
                       placeholder="Enter your college name"
                       value={data.college} 
                       onChange={e => setData({ ...data, college: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500/10 outline-none"
+                      className="w-full bg-white brutal-input px-4 py-4 text-sm font-black"
                     />
                   </div>
                 </div>
@@ -2463,39 +2500,39 @@ export default function App() {
 
             {step === 3 && (
               <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-6">
-                <h3 className="text-2xl font-black text-slate-900 mb-2 leading-tight">Location & Preferences</h3>
+                <h3 className="text-3xl font-black text-black mb-2 tracking-tighter uppercase italic">Preferences</h3>
                 <div className="space-y-4">
                    <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Location (State)</label>
+                    <label className="text-[10px] font-black text-black uppercase tracking-widest px-1">Location</label>
                     <input 
                       placeholder="e.g. Karnataka"
                       value={data.location} 
                       onChange={e => setData({ ...data, location: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500/10 outline-none"
+                      className="w-full bg-white brutal-input px-4 py-4 text-sm font-black"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Eligibility Filter</label>
+                    <label className="text-[10px] font-black text-black uppercase tracking-widest px-1">Eligibility</label>
                     <select 
                       value={data.eligibility} 
                       onChange={e => setData({ ...data, eligibility: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-4 text-sm font-bold focus:ring-2 focus:ring-indigo-500/10 outline-none"
+                      className="w-full bg-white brutal-input px-4 py-4 text-sm font-black"
                     >
                       <option value="Open to all">Open to all</option>
                       <option value="Indian nationals">Indian nationals</option>
                       <option value="Women only">Women only</option>
                     </select>
                   </div>
-                  <div className="flex items-center justify-between p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100">
+                  <div className="flex items-center justify-between p-4 bg-neo-yellow/20 border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                     <div className="flex items-center gap-3">
-                      <Bell className="w-4 h-4 text-indigo-600" />
-                      <span className="text-xs font-bold text-indigo-900">Email Notifications</span>
+                      <Bell className="w-4 h-4 text-black" />
+                      <span className="text-xs font-black uppercase tracking-widest">Notifications</span>
                     </div>
                     <button 
                       onClick={() => setData({ ...data, notificationsEnabled: !data.notificationsEnabled })}
-                      className={cn("w-10 h-6 rounded-full transition-colors relative", data.notificationsEnabled ? "bg-indigo-600" : "bg-slate-200")}
+                      className={cn("w-12 h-7 border-2 border-black transition-colors relative", data.notificationsEnabled ? "bg-neo-green" : "bg-white")}
                     >
-                      <div className={cn("absolute top-1 w-4 h-4 bg-white rounded-full transition-all", data.notificationsEnabled ? "left-5" : "left-1")} />
+                      <div className={cn("absolute top-0.5 w-5 h-5 bg-black border border-white transition-all", data.notificationsEnabled ? "left-6" : "left-0.5")} />
                     </button>
                   </div>
                 </div>
@@ -2503,20 +2540,20 @@ export default function App() {
             )}
           </AnimatePresence>
 
-          <div className="mt-10 flex gap-3">
+          <div className="mt-10 flex gap-4">
             {step > 1 && (
               <button 
                 onClick={() => setStep(step - 1)}
-                className="flex-1 py-4 bg-slate-50 text-slate-500 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-100 transition-colors"
+                className="flex-1 py-4 bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-black hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] font-black text-[10px] uppercase tracking-widest transition-all"
               >
                 Back
               </button>
             )}
             <button 
               onClick={handleNext}
-              className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100"
+              className="flex-[2] py-4 bg-black text-white brutal-btn font-black text-[10px] uppercase tracking-widest hover:bg-neo-pink hover:text-black transition-all"
             >
-              {step === 3 ? 'Enable Smart Match' : 'Next Step'}
+              {step === 3 ? 'Activate Hub' : 'Proceed'}
             </button>
           </div>
         </motion.div>
@@ -2612,51 +2649,51 @@ export default function App() {
           initial={{ scale: 0.9, y: 20, opacity: 0 }} 
           animate={{ scale: 1, y: 0, opacity: 1 }} 
           exit={{ scale: 0.9, y: 20, opacity: 0 }} 
-          className="bg-white w-full max-w-md rounded-[40px] shadow-3xl overflow-hidden relative z-10"
+          className="bg-white w-full max-w-md border-[4px] border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden relative z-10"
         >
           <div className="p-8 sm:p-10">
             <div className="flex justify-between items-center mb-8">
               <div className="flex items-center gap-3">
-                <div className="bg-indigo-600 w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
-                  <Sparkles className="text-white w-5 h-5" />
+                <div className="bg-neo-yellow border-2 border-black w-12 h-12 flex items-center justify-center shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                  <Sparkles className="text-black w-6 h-6" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-black tracking-tight text-slate-900">
-                    {showForgotPassword ? 'Reset Password' : (isLogin ? 'Welcome Back' : 'Join YuvaHub')}
+                  <h2 className="text-2xl font-black tracking-tighter text-black uppercase">
+                    {showForgotPassword ? 'Reset' : (isLogin ? 'Login' : 'Join')}
                   </h2>
-                  <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">
-                    {showForgotPassword ? 'Enter your email' : 'Empower your future'}
+                  <p className="text-black/50 text-[10px] font-black uppercase tracking-widest mt-0.5">
+                    {showForgotPassword ? 'Enter email' : 'Empower your future'}
                   </p>
                 </div>
               </div>
               <button 
                 onClick={() => setShowLoginModal(false)}
-                className="p-2 hover:bg-slate-100 rounded-xl transition-colors"
+                className="p-2 border-2 border-black hover:bg-neo-pink transition-colors"
               >
-                <X className="w-6 h-6 text-slate-400" />
+                <X className="w-6 h-6 text-black" />
               </button>
             </div>
 
             {showForgotPassword ? (
               <form onSubmit={handleResetPassword} className="space-y-6">
                 <div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Email Address</label>
+                  <label className="block text-[10px] font-black text-black uppercase tracking-widest mb-2 px-1">Email Address</label>
                   <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-black/40" />
                     <input 
                       required
                       type="email" 
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="your@email.com"
-                      className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold outline-none"
+                      className="w-full pl-12 pr-6 py-4 brutal-input text-sm font-black"
                     />
                   </div>
                 </div>
                 <button 
                   type="submit" 
                   disabled={loading}
-                  className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-slate-200 hover:bg-slate-800 active:scale-[0.98] transition-all disabled:opacity-50"
+                  className="w-full py-4 bg-black text-white brutal-btn font-black text-xs uppercase tracking-widest disabled:opacity-50"
                 >
                   {loading ? 'Sending...' : 'Send Reset Link'}
                 </button>
@@ -2673,61 +2710,61 @@ export default function App() {
                 <button 
                   onClick={handleGoogleLogin}
                   disabled={loading}
-                  className="w-full flex items-center justify-center gap-3 py-4 border border-slate-200 rounded-2xl mb-8 group hover:border-indigo-100 hover:bg-indigo-50 transition-all active:scale-[0.98]"
+                  className="w-full flex items-center justify-center gap-3 py-4 border-2 border-black bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all active:scale-[0.98]"
                 >
                   <svg className="w-5 h-5" viewBox="0 0 24 24">
-                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="currentColor"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="currentColor"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="currentColor"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="currentColor"/>
                   </svg>
-                  <span className="text-sm font-bold text-slate-600 group-hover:text-indigo-600">Continue with Google</span>
+                  <span className="text-sm font-black text-black uppercase tracking-tight">Continue with Google</span>
                 </button>
 
                 <div className="relative mb-8">
-                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
-                  <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-4 font-black text-slate-300 tracking-widest">Or with email</span></div>
+                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t-2 border-black"></div></div>
+                  <div className="relative flex justify-center text-[10px] uppercase"><span className="bg-white px-4 font-black text-black/30 tracking-widest italic">Secret Entrance</span></div>
                 </div>
 
                 <form onSubmit={handleEmailAuth} className="space-y-4">
                   {!isLogin && (
                     <div>
-                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Full Name</label>
+                      <label className="block text-[10px] font-black text-black uppercase tracking-widest mb-2 px-1">Full Name</label>
                       <div className="relative">
-                        <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-black/40" />
                         <input 
                           required
                           type="text" 
                           value={name}
                           onChange={(e) => setName(e.target.value)}
                           placeholder="John Doe"
-                          className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold outline-none"
+                          className="w-full pl-12 pr-6 py-4 brutal-input text-sm font-black"
                         />
                       </div>
                     </div>
                   )}
                   <div>
-                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Email Address</label>
+                    <label className="block text-[10px] font-black text-black uppercase tracking-widest mb-2 px-1">Email Address</label>
                     <div className="relative">
-                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-black/40" />
                       <input 
                         required
                         type="email" 
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="your@email.com"
-                        className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold outline-none"
+                        className="w-full pl-12 pr-6 py-4 brutal-input text-sm font-black"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Password</label>
+                    <label className="block text-[10px] font-black text-black uppercase tracking-widest mb-2 px-1">Password</label>
                     <div className="relative">
-                      {!loading && <Clock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />}
+                      {!loading && <Clock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-black/40" />}
                       <input 
                         required
                         type="password" 
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="••••••••"
-                        className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:border-indigo-500 transition-all text-sm font-bold outline-none"
+                        className="w-full pl-12 pr-6 py-4 brutal-input text-sm font-black"
                       />
                     </div>
                   </div>
@@ -2736,28 +2773,28 @@ export default function App() {
                     <button 
                       type="button" 
                       onClick={() => setShowForgotPassword(true)}
-                      className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:underline"
+                      className="text-[10px] font-black text-black uppercase tracking-widest hover:underline"
                     >
-                      Forgot Password?
+                      Forgot Word?
                     </button>
                   </div>
 
                   <button 
                     type="submit" 
                     disabled={loading}
-                    className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-slate-200 hover:bg-slate-800 active:scale-[0.98] transition-all disabled:opacity-50"
+                    className="w-full py-5 bg-black text-white brutal-btn font-black text-[12px] uppercase tracking-[0.2em] shadow-none hover:bg-neo-green hover:text-black transition-all disabled:opacity-50"
                   >
-                    {loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}
+                    {loading ? 'Processing...' : (isLogin ? 'Login Now' : 'Create Account')}
                   </button>
                 </form>
 
-                <p className="mt-8 text-center text-xs font-bold text-slate-400">
-                  {isLogin ? "Don't have an account? " : "Already have an account? "}
+                <p className="mt-8 text-center text-[10px] font-black text-black uppercase tracking-widest">
+                  {isLogin ? "No entry key? " : "Already verified? "}
                   <button 
                     onClick={() => setIsLogin(!isLogin)}
-                    className="text-indigo-600 hover:underline"
+                    className="text-black underline hover:text-neo-pink transition-colors"
                   >
-                    {isLogin ? 'Sign Up' : 'Log In'}
+                    {isLogin ? 'Register' : 'Access'}
                   </button>
                 </p>
               </>
@@ -2775,18 +2812,18 @@ export default function App() {
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowSuccessReg(null)} className="fixed inset-0 z-[170] bg-emerald-950/20 backdrop-blur-xl" />
             <motion.div initial={{ opacity: 0, scale: 0.8, y: 100 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.8, y: 100 }} className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[180] w-full max-w-sm p-4">
-              <div className="bg-white rounded-[40px] p-8 text-center shadow-3xl border border-emerald-100 relative overflow-hidden">
-                <div className="absolute top-0 left-0 right-0 h-2 bg-emerald-500" />
-                <div className="bg-emerald-500 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-8 shadow-xl shadow-emerald-100 rotate-12">
-                  <Check className="w-10 h-10 text-white" />
+              <div className="bg-white border-[4px] border-black p-8 text-center shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden">
+                <div className="absolute top-0 left-0 right-0 h-4 bg-neo-green border-b-2 border-black" />
+                <div className="bg-neo-green w-24 h-24 border-4 border-black flex items-center justify-center mx-auto mb-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] rotate-3">
+                  <Check className="w-12 h-12 text-black" />
                 </div>
-                <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2">Application Sent!</h2>
-                <p className="text-slate-500 font-medium mb-8">Confirmed for <span className="text-emerald-600 font-bold">{showSuccessReg.eventTitle}</span>.</p>
-                <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 mb-8">
-                  <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Status</p>
-                  <p className="font-black text-emerald-600">Applied</p>
+                <h2 className="text-4xl font-black text-black tracking-tighter uppercase mb-2">Applied!</h2>
+                <p className="text-black/60 font-black text-sm mb-8 uppercase tracking-widest">Victory is yours. confirmed for <span className="text-black underline">{showSuccessReg.eventTitle}</span>.</p>
+                <div className="p-5 bg-neo-yellow border-2 border-black mb-8 rotate-[-1deg]">
+                  <p className="text-[10px] font-black text-black uppercase tracking-[0.2em] mb-1">Mission Status</p>
+                  <p className="font-black text-black text-xl uppercase italic tracking-tighter">On File</p>
                 </div>
-                <button onClick={() => setShowSuccessReg(null)} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest">Done</button>
+                <button onClick={() => setShowSuccessReg(null)} className="w-full py-5 bg-black text-white brutal-btn font-black text-sm uppercase tracking-[0.3em]">Return to Base</button>
               </div>
             </motion.div>
           </>
@@ -2803,26 +2840,26 @@ export default function App() {
             <motion.div 
               key={toast.id} 
               layout
-              initial={{ opacity: 0, y: -20, scale: 0.95 }} 
-              animate={{ opacity: 1, y: 0, scale: 1 }} 
+              initial={{ opacity: 0, x: 50, scale: 0.95 }} 
+              animate={{ opacity: 1, x: 0, scale: 1 }} 
               exit={{ opacity: 0, scale: 0.95 }} 
               className={cn(
-                "pointer-events-auto p-3 sm:p-4 rounded-xl sm:rounded-2xl shadow-2xl border bg-white/95 backdrop-blur-md flex items-start gap-3", 
-                toast.type === 'success' ? "border-emerald-100" : "border-slate-100"
+                "pointer-events-auto p-4 border-[3px] border-black bg-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex items-start gap-4", 
+                toast.type === 'success' ? "bg-neo-green/10" : "bg-neo-pink/10"
               )}
             >
-              <div className={cn("p-1.5 sm:p-2 rounded-lg shrink-0", toast.type === 'success' ? "bg-emerald-100 text-emerald-600" : "bg-indigo-100 text-indigo-600")}>
-                <Bell className="w-3.5 h-3.5 sm:w-4 h-4" />
+              <div className={cn("p-2 border-2 border-black shrink-0", toast.type === 'success' ? "bg-neo-green text-black" : "bg-neo-pink text-white")}>
+                <Bell className="w-4 h-4" />
               </div>
               <div className="flex-1 min-w-0">
-                <h4 className="font-bold text-xs sm:text-sm text-slate-900 leading-tight">{toast.title}</h4>
-                <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 line-clamp-2">{toast.message}</p>
+                <h4 className="font-black text-[12px] uppercase tracking-tighter text-black leading-tight">{toast.title}</h4>
+                <p className="text-[10px] font-bold text-black/50 mt-1 line-clamp-2 uppercase tracking-widest">{toast.message}</p>
               </div>
               <button 
                 onClick={() => setToasts(t => t.filter(x => x.id !== toast.id))}
-                className="p-1 hover:bg-slate-100 rounded-full transition-colors shrink-0"
+                className="p-1 border-2 border-black hover:bg-black hover:text-white transition-all shrink-0"
               >
-                <X className="w-3.5 h-3.5 sm:w-4 h-4 text-slate-300" />
+                <X className="w-4 h-4" />
               </button>
             </motion.div>
           ))}
@@ -2837,41 +2874,31 @@ export default function App() {
         {showNotifications && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowNotifications(false)} className="fixed inset-0 z-[150] bg-slate-900/20 backdrop-blur-sm" />
-            <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} className="fixed right-0 top-0 bottom-0 z-[160] w-full max-w-md bg-white shadow-2xl flex flex-col">
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+            <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} className="fixed right-0 top-0 bottom-0 z-[160] w-full max-w-md bg-white border-l-[4px] border-black shadow-2xl flex flex-col">
+              <div className="p-8 border-b-[4px] border-black flex items-center justify-between bg-neo-blue text-white">
                 <div>
-                  <h3 className="font-black text-lg tracking-tight">Alerts Center</h3>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Recent Updates</p>
+                  <h3 className="font-black text-2xl tracking-tighter uppercase italic">Alerts Center</h3>
+                  <p className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em] mt-1">System Critical</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  {notifications.length > 0 && (
-                    <button 
-                      onClick={() => {
-                        const updated = notifications.map(n => ({ ...n, read: true }));
-                        setNotifications(updated);
-                        localStorage.setItem('user_notifications', JSON.stringify(updated));
-                      }}
-                      className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors text-[10px] font-black uppercase tracking-widest"
-                    >
-                      Clear All
-                    </button>
-                  )}
-                  <button onClick={() => setShowNotifications(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X className="w-5 h-5 text-slate-400" /></button>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setShowNotifications(false)} className="p-3 border-2 border-white hover:bg-white hover:text-black transition-all">
+                    <X className="w-6 h-6" />
+                  </button>
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/30">
+              <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-orange-50/20">
                 {notifications.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center px-10">
-                    <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center text-slate-200 mb-6 shadow-sm">
-                      <BellOff className="w-8 h-8" />
+                  <div className="h-full flex flex-col items-center justify-center text-center px-6">
+                    <div className="w-24 h-24 bg-neo-yellow border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center text-black mb-10 rotate-12">
+                      <BellOff className="w-10 h-10" />
                     </div>
-                    <h4 className="text-lg font-black text-slate-900 mb-2">No alerts yet</h4>
-                    <p className="text-sm font-medium text-slate-500 mb-8">We'll notify you about new hackathons, scholarships and application updates.</p>
+                    <h4 className="text-2xl font-black text-black uppercase tracking-tighter italic mb-4">Radio Silence</h4>
+                    <p className="text-sm font-black text-black/50 mb-10 leading-relaxed uppercase tracking-widest">No active threats or opportunities detected. Carry on, soldier.</p>
                     <button 
                       onClick={() => { setShowNotifications(false); setActiveTab('discover'); }}
-                      className="px-8 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl shadow-slate-200"
+                      className="w-full brutal-btn py-5 bg-black text-white text-[10px] font-black uppercase tracking-[0.2em]"
                     >
-                      Discover Opportunities
+                      Patrol the Field
                     </button>
                   </div>
                 ) : (
@@ -2881,26 +2908,25 @@ export default function App() {
                         if (n.link) window.open(n.link, '_blank');
                       }} 
                       className={cn(
-                        "p-5 rounded-[24px] border transition-all cursor-pointer group hover:scale-[1.02] active:scale-[0.98]", 
-                        n.read ? "bg-white border-slate-100 opacity-60" : "bg-white border-indigo-100 shadow-sm shadow-indigo-100/20"
+                        "p-6 border-2 border-black transition-all cursor-pointer group shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]", 
+                        n.read ? "bg-white opacity-40" : "bg-white"
                       )}>
-                      <div className="flex items-start gap-4">
+                      <div className="flex items-start gap-5">
                         <div className={cn(
-                          "w-10 h-10 rounded-xl shrink-0 flex items-center justify-center",
-                          n.type === 'new_event' ? "bg-emerald-50 text-emerald-600" :
-                          n.type === 'deadline' ? "bg-amber-50 text-amber-600" :
-                          "bg-indigo-50 text-indigo-600"
+                          "w-12 h-12 border-2 border-black shrink-0 flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]",
+                          n.type === 'new_event' ? "bg-neo-green text-black" :
+                          n.type === 'deadline' ? "bg-neo-pink text-white" :
+                          "bg-neo-yellow text-black"
                         )}>
                           {n.type === 'new_event' ? <Sparkles className="w-5 h-5" /> : 
                            n.type === 'deadline' ? <Clock className="w-5 h-5" /> : 
-                           <Bell Ring={true} className="w-5 h-5" />}
+                           <BellRing className="w-5 h-5" />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-1">
-                            <h4 className="text-sm font-black text-slate-900 truncate pr-4">{n.title}</h4>
-                            <span className="text-[9px] font-bold text-slate-400 whitespace-nowrap">{new Date(n.timestamp).toLocaleDateString()}</span>
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="text-sm font-black text-black truncate pr-4 uppercase tracking-tighter">{n.title}</h4>
                           </div>
-                          <p className="text-xs text-slate-500 leading-relaxed font-medium line-clamp-2">{n.message}</p>
+                          <p className="text-[10px] text-black/60 leading-relaxed font-black uppercase tracking-widest line-clamp-2">{n.message}</p>
                         </div>
                       </div>
                     </div>

@@ -2,7 +2,7 @@ export interface Event {
   id: string;
   title: string;
   organization: string;
-  type: 'hackathon' | 'scheme' | 'program';
+  type: 'hackathon' | 'scheme' | 'program' | 'internship';
   description: string;
   location: string;
   date: string;
@@ -47,6 +47,10 @@ export interface UserProfile {
   budgetPreference?: 'free' | 'paid' | 'any';
   deadlinePreference?: 'any' | 'next-7-days' | 'next-30-days';
   preferredDomains?: string[];
+  smartMatchOnboarded?: boolean;
+  degree?: string;
+  yearOfStudy?: string;
+  eligibility?: string;
 }
 
 export interface Message {

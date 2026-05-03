@@ -1,5 +1,5 @@
 {
   "name": "YuvaHub",
-  "description": "Discover corporate hackathons and government schemes tailored to your location and interests.",
+  "description": "YuvaHub is India's leading discovery platform for students. Find life-changing hackathons, scholarships, and mentorship opportunities to accelerate your tech career.",
   "requestFramePermissions": ["geolocation"]
 }

@@ -6,7 +6,7 @@ export const FALLBACK_EVENTS: Event[] = [
     title: "Google Solution Challenge 2026",
     organization: "Google Developers",
     type: "hackathon",
-    description: "Build a solution for one or more of the United Nations 17 Sustainable Development Goals using Google technology.",
+    description: "YuvaHub is India's leading discovery platform for students. Find life-changing hackathons, scholarships, and mentorships to accelerate your tech career. AI-powered matching for your skills.",
     location: "Online",
     date: "January - March 2026",
     link: "https://developers.google.com/community/challenge",
