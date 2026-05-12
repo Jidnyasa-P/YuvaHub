@@ -2,41 +2,95 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Fields:
+    //   - location: string (required)
+    //   - age: number (required)
+    //   - interests: list (required)
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - bookmarkedEventIds: list (optional)
+    //   - registeredEventIds: list (optional)
+    //
+    // Collection: registrations
+    // Fields:
+    //   - userId: string (required)
+    //   - userEmail: string (required)
+    //   - userLocation: string (required)
+    //   - userAge: number (required)
+    //   - eventId: string (required)
+    //   - eventTitle: string (required)
+    //   - registeredAt: timestamp (required)
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
     function isAuthenticated() {
       return request.auth != null;
     }
     
-    function isOwner(uid) {
-      return isAuthenticated() && request.auth.uid == uid;
-    }
-
-    match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow write: if isOwner(userId);
-    }
-
-    match /opportunities/{oppId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.resource.data.submitterUid == request.auth.uid;
-      allow update: if isOwner(resource.data.submitterUid);
-      allow delete: if isOwner(resource.data.submitterUid);
-    }
-
-    match /mentor_applications/{appId} {
-      allow read: if isAuthenticated() && resource.data.submitterUid == request.auth.uid;
-      allow create: if isAuthenticated() && request.resource.data.submitterUid == request.auth.uid;
-      allow update: if isOwner(resource.data.submitterUid);
-      allow delete: if isOwner(resource.data.submitterUid);
-    }
-    match /user_feeds/{feedId} {
-      allow read, write: if isOwner(feedId) || (feedId.size() > 0 && isOwner(feedId.split('_')[0]));
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
     }
     
-    match /community_posts/{postId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
-      allow update: if isOwner(resource.data.uid);
-      allow delete: if isOwner(resource.data.uid);
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == "uditt490@gmail.com" && request.auth.token.email_verified == true);
+    }
+    
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Collection: users
+    // ===============================================================
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      
+      allow create, update: if isOwner(userId) && 
+        request.resource.data.keys().hasAll(['location', 'age', 'interests', 'uid', 'email']) &&
+        request.resource.data.location is string &&
+        request.resource.data.age is number &&
+        request.resource.data.interests is list &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.email == request.auth.token.email &&
+        (!('bookmarkedEventIds' in request.resource.data) || request.resource.data.bookmarkedEventIds is list) &&
+        (!('registeredEventIds' in request.resource.data) || request.resource.data.registeredEventIds is list) &&
+        (!('skills' in request.resource.data) || request.resource.data.skills is list) &&
+        (!('preferredDomains' in request.resource.data) || request.resource.data.preferredDomains is list);
+    }
+
+    // ===============================================================
+    // Collection: registrations
+    // ===============================================================
+    match /registrations/{regId} {
+      allow create: if isAuthenticated() && 
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.userEmail == request.auth.token.email &&
+        request.resource.data.registeredAt == request.time &&
+        request.resource.data.userLocation is string &&
+        request.resource.data.userAge is number &&
+        request.resource.data.eventId is string &&
+        request.resource.data.eventTitle is string;
+        
+      allow read, delete: if isAdmin();
+      allow update: if false;
+    }
+
+    // ===============================================================
+    // Collection: newsletter
+    // ===============================================================
+    match /newsletter/{email} {
+      allow create, update: if isValidEmail(email) && 
+        request.resource.data.keys().hasAll(['email', 'subscribedAt']) &&
+        request.resource.data.email == email;
+        
+      allow read, delete: if isAdmin();
     }
   }
 }
