@@ -1,11 +1,14 @@
 import asyncio
 import logging
-import sys
+import time
 import os
+import sys
+from datetime import datetime
 
-# Setup paths
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "scraper_engine"))
+# Setup paths relative to script
+base_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(base_dir)
+sys.path.append(os.path.join(base_dir, "scraper_engine"))
 
 from scraper_engine.sources.hackathons.devfolio import DevfolioScraper
 from scraper_engine.sources.hackathons.devpost import DevpostScraper
@@ -17,36 +20,26 @@ from registry.scraper_registry import registry
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    format='%(asctime)s [%(levelname)s] ScraperScheduler: %(message)s',
     stream=sys.stdout
 )
-logger = logging.getLogger("YuvahubPipeline")
+logger = logging.getLogger("Scheduler")
 
-def ingestor_callback(result, source_name, ingestor):
-    if result["status"] == "success":
-        stats = ingestor.save_batch(result["data"])
-        logger.info(f"[{source_name}] Ingestion Stats: {stats}")
-    else:
-        logger.error(f"[{source_name}] Scrape failed: {result['error']}")
-
-async def run_pipeline():
-    logger.info("--- Starting Yuvahub Real Data Pipeline ---")
-    
+async def run_scrape_cycle():
+    logger.info("Starting scheduled scraper execution cycle...")
     ingestor = Ingestor()
     db = ingestor.db
-    
-    # 1. Register Scrapers centrally so they are never overwritten
+
+    # Standard registry register
     registry.register(DevfolioScraper(), "https://api.devfolio.co/api/hackathons?filter=all")
     registry.register(DevpostScraper(), "https://devpost.com/api/hackathons")
     registry.register(UnstopScraper(), "https://unstop.com/api/public/opportunity/search-result")
     registry.register(EventbriteScraper(), "https://www.eventbrite.com/api/v3/events/search/")
     registry.register(OpportunitiesCircleScraper(), "https://opportunitiescircle.com/wp-json/wp/v2/posts")
-    
-    # 2. Execute all registered scrapers concurrently
-    results = await registry.execute_all(lambda res, src: ingestor_callback(res, src, ingestor))
 
-    # Persist live metrics in MongoDB for admin dashboard read
-    from datetime import datetime
+    results = await registry.execute_all()
+
+    # Track metrics and save to MongoDB
     for res in results:
         if not isinstance(res, dict):
             continue
@@ -59,19 +52,18 @@ async def run_pipeline():
 
         source_id = source_name.lower().replace(" ", "_")
         
-        # Calculate duplicates/inserts
         inserted = 0
         updated = 0
         duplicate_pct = 0.0
 
         if status == "success" and items_found > 0:
-            # Re-read or estimate stats
             stats = ingestor.save_batch(res.get("data", []))
             inserted = stats.get("inserted", 0)
             updated = stats.get("updated", 0)
             if items_found > 0:
                 duplicate_pct = round((updated / items_found) * 100.0, 1)
 
+        # Map source quality score
         quality_scores = {
             "devpost": 100,
             "devfolio": 100,
@@ -81,6 +73,7 @@ async def run_pipeline():
         }
         source_yield_quality = quality_scores.get(source_id, 70)
 
+        # Save metrics document in database
         if db is not None:
             try:
                 db.scraper_metrics.update_one(
@@ -99,31 +92,37 @@ async def run_pipeline():
                             "duration_sec": duration,
                             "error": error_msg,
                             "yield_quality": source_yield_quality,
-                            "ops_per_hour": round(items_found * 1.5, 1),
+                            "ops_per_hour": round(items_found * 1.5, 1), # estimated items/hour
                             "proxyHealth": "green" if status == "success" else "red"
                         }
                     },
                     upsert=True
                 )
+                logger.info(f"Persisted metrics for [{source_id}] (Inserted: {inserted}, Duplicates: {updated})")
             except Exception as dberr:
-                logger.error(f"Failed to record live telemetry: {dberr}")
+                logger.error(f"Failed to record scraper metrics: {dberr}")
 
     ingestor.close()
-    
-    # Log registry metrics
-    metrics = registry.get_admin_metrics()
-    logger.info(f"--- Pipeline Completed. Scraper Metrics: {metrics} ---")
+    logger.info("Scheduled cycle execution complete.")
 
-    # Serialize all successfully scraped items for parent process capture
-    all_opportunities = []
-    for r in results:
-        if isinstance(r, dict) and r.get("status") == "success":
-            all_opportunities.extend(r.get("data", []))
-            
-    print("=== SCRAPE_RESULTS_JSON_START ===")
-    import json
-    print(json.dumps(all_opportunities))
-    print("=== SCRAPE_RESULTS_JSON_END ===")
+async def scheduler_loop():
+    logger.info("Initializing YuvaHub Ingestion Scheduler...")
+    
+    # Run immediate scrape on startup to ensure fresh data
+    try:
+        await run_scrape_cycle()
+    except Exception as e:
+        logger.error(f"Startup run failed: {e}")
+
+    # Standard cycle: Run every 60 minutes
+    interval_sec = 60 * 60 
+    while True:
+        logger.info(f"Sleeping for {interval_sec}s until next cycle...")
+        await asyncio.sleep(interval_sec)
+        try:
+            await run_scrape_cycle()
+        except Exception as e:
+            logger.error(f"Error during periodic scrape: {e}")
 
 if __name__ == "__main__":
-    asyncio.run(run_pipeline())
+    asyncio.run(scheduler_loop())

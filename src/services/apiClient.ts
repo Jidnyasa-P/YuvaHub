@@ -84,6 +84,12 @@ export async function fetchSmartFeed(profile: any, page: number = 1) {
     searchParams.append('page', page.toString());
     
     if (profile?.domain) searchParams.append('domain', profile.domain);
+    if (profile?.skills) {
+      const skl = Array.isArray(profile.skills) ? profile.skills.join(',') : String(profile.skills);
+      searchParams.append('skills', skl);
+    }
+    if (profile?.country) searchParams.append('country', profile.country);
+    if (profile?.field) searchParams.append('field', profile.field);
 
     const url = `${API_BASE_URL}/feed?${searchParams.toString()}`;
     const response = await fetchWithRetry(url, {
@@ -340,5 +346,20 @@ export async function trackInteraction(opportunityId: string, actionType: 'view'
     // Fire and forget, don't break UI for tracking failures
     console.warn("Failed to track interaction", e);
     return false;
+  }
+}
+
+export async function fetchOpportunityById(id: string) {
+  try {
+    const url = `${API_BASE_URL}/opportunity/${id}`;
+    const response = await fetchWithRetry(url, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" }
+    });
+    if (!response.ok) throw new Error("Opportunity offline");
+    return await response.json();
+  } catch (error) {
+    console.warn(`Could not sync opportunity details for ${id}:`, error);
+    return null;
   }
 }

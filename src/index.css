@@ -27,7 +27,7 @@
 }
 
 @utility clean-card {
-  @apply bg-white border border-[var(--color-border)] rounded-xl shadow-sm overflow-hidden;
+  @apply bg-white border border-[var(--color-border)] rounded-xl shadow-sm overflow-hidden transition-all duration-300 ease-out hover:shadow-md hover:border-gray-300;
 }
 
 @utility clean-btn {

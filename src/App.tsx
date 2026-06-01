@@ -6,7 +6,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { UserProfile } from './types';
 import { fetchSystemStats } from './services/apiClient';
 
-// Tab Components
+// Tab/View Components
 import Dashboard from './components/Tabs/Dashboard';
 import Opportunities from './components/Tabs/Opportunities';
 import SubmitOpportunity from './components/Tabs/SubmitOpportunity';
@@ -16,6 +16,7 @@ import Community from './components/Tabs/Community';
 import SettingsTab from './components/Tabs/Settings';
 import AdminDashboard from './components/Admin/AdminDashboard';
 import NotificationDropdown from './components/ui/NotificationDropdown';
+import OpportunityDetail from './components/Tabs/OpportunityDetail';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -25,6 +26,41 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [backendReady, setBackendReady] = useState(false);
   const [lastSyncedTime, setLastSyncedTime] = useState(new Date().toLocaleTimeString());
+
+  // Dynamic Routing state based on the HTML5 History API (perfect crawlability)
+  const [selectedOppId, setSelectedOppId] = useState<string | null>(() => {
+    const oppMatch = window.location.pathname.match(/^\/opportunity\/([^/]+)/);
+    return oppMatch ? oppMatch[1] : null;
+  });
+
+  // Track popstate changes (back and forward buttons on browsers)
+  useEffect(() => {
+    const handleLocationChange = () => {
+      const oppMatch = window.location.pathname.match(/^\/opportunity\/([^/]+)/);
+      if (oppMatch) {
+         setSelectedOppId(oppMatch[1]);
+      } else {
+         setSelectedOppId(null);
+      }
+    };
+    window.addEventListener('popstate', handleLocationChange);
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+    };
+  }, []);
+
+  const viewOpportunity = (id: string, title?: string) => {
+    const cleanTitle = title 
+      ? title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+      : "view";
+    window.history.pushState(null, '', `/opportunity/${id}/${cleanTitle}`);
+    setSelectedOppId(id);
+  };
+
+  const clearSelectedOpportunity = () => {
+    window.history.pushState(null, '', '/');
+    setSelectedOppId(null);
+  };
 
   useEffect(() => {
     const checkBackend = async () => {
@@ -79,26 +115,25 @@ function App() {
     { id: 'community', label: 'Community', icon: MessageSquare },
     { id: 'profile', label: 'My Profile', icon: User },
     { id: 'settings', label: 'Settings', icon: Settings },
-    // Only show admin for specific user, but for demo showing for all or based on a condition
     ...(user?.email === 'uditt490@gmail.com' ? [{ id: 'admin', label: 'Admin', icon: Activity }] : []),
   ];
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard': return <Dashboard user={user} profile={profile} />;
-      case 'opportunities': return <Opportunities user={user} profile={profile} />;
+      case 'dashboard': return <Dashboard user={user} profile={profile} onViewDetails={viewOpportunity} />;
+      case 'opportunities': return <Opportunities user={user} profile={profile} onViewDetails={viewOpportunity} />;
       case 'submit': return <SubmitOpportunity user={user} />;
       case 'mentorship': return <Mentorship user={user} />;
       case 'community': return <Community user={user} profile={profile} />;
       case 'profile': return <Profile user={user} profile={profile} setProfile={setProfile} />;
       case 'settings': return <SettingsTab user={user} profile={profile} />;
       case 'admin': return <AdminDashboard />;
-      default: return <Dashboard user={user} profile={profile} />;
+      default: return <Dashboard user={user} profile={profile} onViewDetails={viewOpportunity} />;
     }
   };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-primary font-medium">INITIALIZING SYSTEM...</div>;
+    return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-blue-600 font-bold tracking-widest uppercase">INITIALIZING SYSTEM...</div>;
   }
 
   return (
@@ -114,11 +149,14 @@ function App() {
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto no-scrollbar">
           {TABS.map(tab => {
             const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
+            const isActive = activeTab === tab.id && !selectedOppId;
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  clearSelectedOpportunity();
+                }}
                 className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-all rounded-lg ${isActive ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-600' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 border-l-4 border-transparent'}`}
                 style={{ borderLeftWidth: isActive ? '4px' : '0px', paddingLeft: isActive ? '12px' : '16px' }}
               >
@@ -161,11 +199,15 @@ function App() {
           <nav className="space-y-2">
             {TABS.map(tab => {
               const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
+              const isActive = activeTab === tab.id && !selectedOppId;
               return (
                 <button
                   key={tab.id}
-                  onClick={() => { setActiveTab(tab.id); setIsMobileMenuOpen(false); }}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    clearSelectedOpportunity();
+                    setIsMobileMenuOpen(false);
+                  }}
                   className={`w-full flex items-center gap-3 px-4 py-4 text-sm font-medium transition-all rounded-lg ${isActive ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-600' : 'text-gray-600 hover:bg-gray-50 border-l-4 border-transparent'}`}
                 >
                   <Icon className="w-5 h-5" />
@@ -178,7 +220,8 @@ function App() {
                 <button onClick={() => { logout(); setIsMobileMenuOpen(false); }} className="clean-btn-outline w-full py-3 text-sm">Logout</button>
               ) : (
                 <button onClick={() => { signInWithGoogle(); setIsMobileMenuOpen(false); }} className="clean-btn w-full py-3 text-sm">Sign in with Google</button>
-              )}
+              )
+              }
             </div>
           </nav>
         </div>
@@ -190,8 +233,12 @@ function App() {
         {/* Topbar */}
         <div className="hidden lg:flex h-16 border-b border-gray-200 bg-white items-center justify-between px-8 shrink-0">
            <div className="flex-1 max-w-xl">
-             {/* General search handled inside components generally, but can stay here optionally or just say Welcome */}
-             <p className="text-sm text-gray-500 font-medium">{user ? `Welcome back, ${profile?.name || user.displayName || 'Student'}` : 'Welcome to YuvaHub'}</p>
+             <p className="text-sm text-gray-500 font-medium">
+               {selectedOppId 
+                 ? "Detail Overview" 
+                 : (user ? `Welcome back, ${profile?.name || user.displayName || 'Student'}` : 'Welcome to YuvaHub')
+               }
+             </p>
            </div>
            <div className="flex items-center gap-6">
               <NotificationDropdown profile={profile} />
@@ -203,16 +250,24 @@ function App() {
 
         {/* Scrollable Content */}
         <div className="flex-1 p-4 lg:p-8 overflow-y-auto no-scrollbar pb-24" id="app-content">
-          {renderContent()}
+          {selectedOppId ? (
+            <OpportunityDetail 
+              id={selectedOppId} 
+              onBack={clearSelectedOpportunity} 
+              profile={profile} 
+            />
+          ) : (
+            renderContent()
+          )}
         </div>
         
         {/* Live Feed Strip Footer */}
-        <div className="absolute bottom-0 left-0 right-0 bg-gray-900 text-gray-400 text-xs py-2 px-6 flex items-center justify-center gap-2 border-t border-gray-800 z-20">
+        <div className="absolute bottom-0 left-0 right-0 bg-gray-900 text-gray-400 text-xs py-2 px-6 flex items-center justify-center gap-2 border-t border-gray-800 z-25">
           <span className={`${backendReady ? 'text-green-400' : 'text-red-400'} animate-pulse`}>●</span> 
           <span className="font-medium">{backendReady ? 'Live' : 'Offline'}</span>
           <span className="hidden sm:inline">· Last synced: {lastSyncedTime}</span>
-          <span>· 842 opportunities indexed</span>
-          <span className="hidden md:inline">· YuvaHub © 2025</span>
+          <span>· Opportunities indexed & verified</span>
+          <span className="hidden md:inline">· YuvaHub © 2026</span>
         </div>
       </main>
 

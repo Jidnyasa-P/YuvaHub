@@ -1,5 +1,6 @@
 {
   "name": "YuvaHub",
   "description": "YuvaHub is India's leading discovery platform for students. Find life-changing hackathons, scholarships, and mentorship opportunities to accelerate your tech career.",
-  "requestFramePermissions": ["geolocation"]
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

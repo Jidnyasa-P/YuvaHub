@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Target, Search, Compass, ShieldCheck, Loader2, ArrowRight, RefreshCw, Sparkles, Share2, FileText } from 'lucide-react';
+import { io } from 'socket.io-client';
 import { UserProfile } from '../../types';
 import { fetchSmartFeed, fetchExploreFeed, trackInteraction, runScoutProtocolBackend, generateApplyAssistBackend } from '../../services/apiClient';
 import ShareModal from '../ui/ShareModal';
@@ -8,9 +9,10 @@ import ApplyAssistModal from '../ui/ApplyAssistModal';
 interface DashboardProps {
   user: any;
   profile: UserProfile | null;
+  onViewDetails?: (id: string, title?: string) => void;
 }
 
-export default function Dashboard({ user, profile }: DashboardProps) {
+export default function Dashboard({ user, profile, onViewDetails }: DashboardProps) {
   const [showScoutModal, setShowScoutModal] = useState(false);
   const [scoutStep, setScoutStep] = useState(1);
   const [scoutData, setScoutData] = useState({ year: '', field: '', tech: '', goal: '' });
@@ -35,17 +37,24 @@ export default function Dashboard({ user, profile }: DashboardProps) {
     if (user && profile) {
       loadInitialFeed(false, discoveryMode);
       
-      // Auto-refresh check every 5 minutes
-      const interval = setInterval(() => {
-        loadInitialFeed(false, discoveryMode);
-      }, 300000);
+      // Initialize Real-Time WebSocket Connection
+      const socket = io(); // Connects to same host/port
+
+      socket.on("connected", () => {
+        console.log("Connected to Real-Time Feed Pipeline");
+      });
+
+      socket.on("NEW_OPPORTUNITY", (opp: any) => {
+        setNewLiveItems(prev => [opp, ...prev]);
+        setHasNewUpdates(true);
+      });
       
       // Also refresh on window focus
       const handleFocus = () => loadInitialFeed(false, discoveryMode);
       window.addEventListener('focus', handleFocus);
       
       return () => {
-        clearInterval(interval);
+        socket.disconnect();
         window.removeEventListener('focus', handleFocus);
       };
     }
@@ -292,7 +301,7 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                       >
                         <Share2 className="w-4 h-4" />
                       </button>
-                      <div onClick={() => trackInteraction(item.id, 'view')}>
+                      <div>
                         <div className="flex justify-between items-start mb-2 pr-6">
                           <span className="text-xs font-semibold px-2 py-1 bg-blue-50 text-blue-700 rounded-md">
                             {item.type || 'Opportunity'}
@@ -302,7 +311,17 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                             {(item.matchScore || item.match_score || item.smartMatch || item.smart_match) && <span className="text-xs font-semibold text-green-600">⚡ {item.matchScore || item.match_score ? (item.matchScore || item.match_score) + '% Match' : 'Smart Match'}</span>}
                           </div>
                         </div>
-                        <h4 className="font-bold text-gray-900 mb-1">{item.title}</h4>
+                        <a 
+                          href={`/opportunity/${item.id}/${(item.title || "opportunity").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            trackInteraction(item.id, 'view');
+                            if (onViewDetails) onViewDetails(item.id, item.title);
+                          }}
+                          className="hover:text-blue-600 transition-colors block cursor-pointer"
+                        >
+                          <h4 className="font-bold text-gray-900 mb-1 hover:text-blue-600 transition-colors leading-tight text-base sm:text-lg">{item.title}</h4>
+                        </a>
                         <p className="text-sm text-gray-500 mb-3">{item.organization || item.org}</p>
                         <p className="text-sm text-gray-700 line-clamp-2 mb-4">{item.description}</p>
                         {(item.matchReason || item.match_reason) && <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded mb-4">✓ {item.matchReason || item.match_reason}</p>}

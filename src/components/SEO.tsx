@@ -1,62 +1,98 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 interface SEOProps {
   title?: string;
   description?: string;
   image?: string;
   url?: string;
+  structuredSchemaType?: 'JobPosting' | 'Event' | 'WebApplication';
+  schemaData?: any;
 }
 
 /**
- * SEO component to manage meta tags and structured data dynamically.
+ * SEO component to manage meta tags and structured data dynamically in the browser DOM.
  */
 export const SEO: React.FC<SEOProps> = ({ 
   title = "YuvaHub | Find Student Hackathons, Scholarships & Mentorships", 
   description = "Discovery platform for Indian students. Find hackathons, scholarships, and mentorship opportunities to boost your career. Real-time updates and AI matching.",
   image = "https://yuvahub.xyz/og-image.jpg",
-  url = "https://yuvahub.xyz"
+  url = "https://yuvahub.xyz",
+  structuredSchemaType = "WebApplication",
+  schemaData = null
 }) => {
-  const structuredData = {
-    "@context": "https://schema.org",
-    "@type": "WebApplication",
-    "name": "YuvaHub",
-    "url": url,
-    "description": description,
-    "applicationCategory": "EducationalApplication",
-    "operatingSystem": "Web",
-    "author": {
-      "@type": "Organization",
-      "name": "YuvaHub Team"
-    },
-    "image": image
-  };
+  useEffect(() => {
+    // Dynamic document title
+    document.title = title;
 
-  return (
-    <>
-      <title>{title}</title>
-      <meta name="description" content={description} />
-      
-      {/* Open Graph / Facebook */}
-      <meta property="og:type" content="website" />
-      <meta property="og:url" content={url} />
-      <meta property="og:title" content={title} />
-      <meta property="og:description" content={description} />
-      <meta property="og:image" content={image} />
+    // Helper to safely set/update any head meta tag
+    const setMetaTag = (attributeName: string, attributeValue: string, content: string) => {
+      let meta = document.querySelector(`meta[${attributeName}="${attributeValue}"]`);
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.setAttribute(attributeName, attributeValue);
+        document.head.appendChild(meta);
+      }
+      meta.setAttribute('content', content);
+    };
 
-      {/* Twitter */}
-      <meta property="twitter:card" content="summary_large_image" />
-      <meta property="twitter:url" content={url} />
-      <meta property="twitter:title" content={title} />
-      <meta property="twitter:description" content={description} />
-      <meta property="twitter:image" content={image} />
+    // Helper to update the link canonical tag
+    const setCanonicalTag = (hrefValue: string) => {
+      let link = document.querySelector('link[rel="canonical"]');
+      if (!link) {
+        link = document.createElement('link');
+        link.setAttribute('rel', 'canonical');
+        document.head.appendChild(link);
+      }
+      link.setAttribute('href', hrefValue);
+    };
 
-      {/* Canonical */}
-      <link rel="canonical" href={url} />
+    // Update standard description
+    setMetaTag('name', 'description', description);
+    
+    // Update OpenGraph details for rich social cards
+    setMetaTag('property', 'og:type', 'website');
+    setMetaTag('property', 'og:url', url);
+    setMetaTag('property', 'og:title', title);
+    setMetaTag('property', 'og:description', description);
+    setMetaTag('property', 'og:image', image);
 
-      {/* Structured Data */}
-      <script type="application/ld+json">
-        {JSON.stringify(structuredData)}
-      </script>
-    </>
-  );
+    // Update Twitter details
+    setMetaTag('name', 'twitter:card', 'summary_large_image');
+    setMetaTag('name', 'twitter:url', url);
+    setMetaTag('name', 'twitter:title', title);
+    setMetaTag('name', 'twitter:description', description);
+    setMetaTag('name', 'twitter:image', image);
+
+    // Update Canonical URL
+    setCanonicalTag(url);
+
+    // Schema Markup Construction
+    const baseSchema = {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "YuvaHub",
+      "url": "https://yuvahub.xyz",
+      "description": "India's leading discovery platform for student opportunities, hackathons, and scholarships.",
+      "applicationCategory": "EducationalApplication",
+      "operatingSystem": "Web",
+      "image": image
+    };
+
+    const finalSchema = schemaData ? {
+      "@context": "https://schema.org",
+      ...schemaData
+    } : baseSchema;
+
+    // Inject JSON-LD Script Tag dynamically inside the head
+    let scriptTag = document.getElementById('jsonld-seo-schema') as HTMLScriptElement;
+    if (!scriptTag) {
+      scriptTag = document.createElement('script');
+      scriptTag.id = 'jsonld-seo-schema';
+      scriptTag.type = 'application/ld+json';
+      document.head.appendChild(scriptTag);
+    }
+    scriptTag.text = JSON.stringify(finalSchema);
+  }, [title, description, image, url, structuredSchemaType, schemaData]);
+
+  return null;
 };

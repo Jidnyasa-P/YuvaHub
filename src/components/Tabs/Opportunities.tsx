@@ -5,7 +5,7 @@ import { searchOpportunities, trackInteraction, refineQueryBackend, generateAppl
 import ShareModal from '../ui/ShareModal';
 import ApplyAssistModal from '../ui/ApplyAssistModal';
 
-export default function Opportunities({ user, profile }: { user: any, profile: UserProfile | null }) {
+export default function Opportunities({ user, profile, onViewDetails }: { user: any, profile: UserProfile | null, onViewDetails?: (id: string, title?: string) => void }) {
   const [filter, setFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -26,9 +26,6 @@ export default function Opportunities({ user, profile }: { user: any, profile: U
 
   const FILTERS = ['All', 'Internships', 'Hackathons', 'Scholarships', 'Jobs', 'Fellowships', 'Events', 'Programs'];
   const QUICK_ZAPS = ['GSoC Projects', 'Stanford Scholarships', 'UN Fellowships', 'Microsoft Internships'];
-
-  const CACHE_KEY_PREFIX = 'yuva_live_search_3_';
-  const CACHE_TTL_MS = 10 * 60 * 1000;
 
   useEffect(() => {
     if (!hasSearched && profile && strength >= 50) {
@@ -110,11 +107,9 @@ export default function Opportunities({ user, profile }: { user: any, profile: U
   };
 
   const getDeadlineColor = (daysStr: string) => {
-    // simplified color coding based on string content assuming Gemini returns valid formats
     if (!daysStr) return 'text-gray-500';
     if (daysStr.toLowerCase().includes('rolling')) return 'text-green-600';
     
-    // Attempt basic parsing, if "days" is part of the string
     const daysMatch = daysStr.match(/(\d+)\s+days/i);
     if (daysMatch) {
       const days = parseInt(daysMatch[1]);
@@ -262,94 +257,112 @@ export default function Opportunities({ user, profile }: { user: any, profile: U
               </div>
             </div>
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              {searchData.results.map((opp: any, idx: number) => (
-                <div key={idx} className="clean-card p-6 flex flex-col hover:shadow-lg transition-shadow relative group">
-                   <div className="absolute top-6 right-6 flex items-center gap-2">
-                     <button 
-                       onClick={() => {
-                         setShareOpp({ title: opp.title, link: opp.apply_link || opp.applyLink || window.location.href });
-                         trackInteraction(opp.id, 'save');
-                       }}
-                       className="text-gray-300 hover:text-blue-600 transition-colors"
-                       title="Share"
-                     >
-                       <Share2 className="w-5 h-5" />
-                     </button>
-                     <button 
-                       onClick={() => trackInteraction(opp.id, 'save')}
-                       className="text-gray-300 hover:text-blue-600 transition-colors" title="Bookmark"
-                     >
-                       <Bookmark className="w-5 h-5" />
-                     </button>
-                   </div>
-                   
-                   <div className="flex gap-4 mb-4" onClick={() => trackInteraction(opp.id, 'view')}>
-                     <div className="w-12 h-12 rounded bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center text-blue-800 font-bold text-lg shrink-0 border border-blue-200">
-                       {opp.org ? opp.org.substring(0,2).toUpperCase() : (opp.organization ? opp.organization.substring(0,2).toUpperCase() : 'OP')}
-                     </div>
-                     <div className="flex-1 pr-8">
-                       <h3 className="text-lg font-bold text-gray-900 leading-tight mb-1">{opp.title}</h3>
-                       <p className="text-sm font-medium text-gray-600">{opp.org || opp.organization}</p>
-                     </div>
-                   </div>
-
-                   <p className="text-sm text-gray-700 line-clamp-2 mb-4 flex-1">{opp.description}</p>
-                   
-                   {(opp.match_reason || opp.matchReason) && (
-                     <div className="bg-blue-50/50 rounded-lg p-3 inline-flex items-start gap-2 mb-4 border border-blue-100">
-                       <span className="text-blue-600 shrink-0 mt-0.5">✓</span>
-                       <p className="text-xs font-medium text-blue-800">{opp.match_reason || opp.matchReason}</p>
-                     </div>
-                   )}
-
-                   <div className="flex flex-wrap gap-2 mb-5">
-                      {opp.type && (
-                        <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs font-semibold rounded">
-                          {opp.type}
-                        </span>
-                      )}
-                      {opp.tags && opp.tags.slice(0,3).map((t: string) => (
-                        <span key={t} className="px-2 py-1 bg-gray-50 border border-gray-200 text-gray-600 text-xs font-medium rounded">
-                          {t}
-                        </span>
-                      ))}
-                      {(opp.trending || opp.status === 'HOT') && (
-                        <span className="px-2 py-1 bg-orange-50 text-orange-600 text-xs font-bold rounded">🔥 Trending</span>
-                      )}
-                      {(opp.closing_soon || opp.closingSoon) && (
-                        <span className="px-2 py-1 bg-red-50 text-red-600 text-xs font-bold rounded">⚡ Closing Soon</span>
-                      )}
-                      {opp.verified === false && (
-                        <span className="px-2 py-1 bg-yellow-50 text-yellow-700 text-xs font-bold rounded">⚠️ Unverified</span>
-                      )}
-                   </div>
-
-                   <div className="flex items-center justify-between pt-4 border-t border-gray-100 mt-auto gap-3">
-                     <div className={`flex items-center gap-1.5 text-xs sm:text-sm font-medium ${getDeadlineColor(opp.deadline)}`}>
-                       <Clock className="w-4 h-4" /> {opp.deadline || 'Deadline Unknown'}
-                     </div>
-                     <div className="flex items-center gap-2">
+              {searchData.results.map((opp: any, idx: number) => {
+                const cleanSlug = (opp.title || "opportunity")
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, "-")
+                  .replace(/^-+|-+$/g, "");
+                const localDetailUrl = `${window.location.origin}/opportunity/${opp.id}/${cleanSlug}`;
+                
+                return (
+                  <div key={idx} className="clean-card p-6 flex flex-col hover:shadow-lg transition-shadow relative group">
+                     <div className="absolute top-6 right-6 flex items-center gap-2">
                        <button 
-                         onClick={() => handleApplyAssist(opp)}
-                         className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors shadow-sm"
+                         onClick={() => {
+                           setShareOpp({ title: opp.title, link: localDetailUrl });
+                           trackInteraction(opp.id, 'save');
+                         }}
+                         className="text-gray-300 hover:text-blue-600 transition-colors"
+                         title="Share"
                        >
-                         <FileText className="w-3.5 h-3.5" /> Apply Assist
+                         <Share2 className="w-5 h-5" />
                        </button>
-                       {(opp.apply_link || opp.applyLink) && (
-                         <a 
-                           href={opp.apply_link || opp.applyLink} 
-                           target="_blank" 
-                           rel="noopener noreferrer" 
-                           onClick={() => trackInteraction(opp.id, 'apply')}
-                           className="clean-btn px-4 py-1.5 text-xs font-bold hover:shadow-md transition-shadow"
-                         >
-                           Apply Now
-                         </a>
-                       )}
+                       <button 
+                         onClick={() => trackInteraction(opp.id, 'save')}
+                         className="text-gray-300 hover:text-blue-600 transition-colors" title="Bookmark"
+                       >
+                         <Bookmark className="w-5 h-5" />
+                       </button>
                      </div>
-                   </div>
-                </div>
-              ))}
+                     
+                     <div className="flex gap-4 mb-4">
+                       <div className="w-12 h-12 rounded bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center text-blue-800 font-bold text-lg shrink-0 border border-blue-200">
+                         {opp.org ? opp.org.substring(0,2).toUpperCase() : (opp.organization ? opp.organization.substring(0,2).toUpperCase() : 'OP')}
+                       </div>
+                       <div className="flex-1 pr-8">
+                         <a 
+                           href={`/opportunity/${opp.id}/${cleanSlug}`}
+                           onClick={(e) => {
+                             e.preventDefault();
+                             trackInteraction(opp.id, 'view');
+                             if (onViewDetails) onViewDetails(opp.id, opp.title);
+                           }}
+                           className="hover:text-blue-600 transition-colors block cursor-pointer"
+                         >
+                           <h3 className="text-lg font-bold text-gray-900 leading-tight mb-1 hover:text-blue-600 transition-colors">{opp.title}</h3>
+                         </a>
+                         <p className="text-sm font-medium text-gray-600">{opp.org || opp.organization}</p>
+                       </div>
+                     </div>
+
+                     <p className="text-sm text-gray-700 line-clamp-2 mb-4 flex-1">{opp.description}</p>
+                     
+                     {(opp.match_reason || opp.matchReason) && (
+                       <div className="bg-blue-50/50 rounded-lg p-3 inline-flex items-start gap-2 mb-4 border border-blue-100">
+                         <span className="text-blue-600 shrink-0 mt-0.5">✓</span>
+                         <p className="text-xs font-medium text-blue-800">{opp.match_reason || opp.matchReason}</p>
+                       </div>
+                     )}
+
+                     <div className="flex flex-wrap gap-2 mb-5">
+                        {opp.type && (
+                          <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs font-semibold rounded">
+                            {opp.type}
+                          </span>
+                        )}
+                        {opp.tags && opp.tags.slice(0,3).map((t: string) => (
+                          <span key={t} className="px-2 py-1 bg-gray-50 border border-gray-200 text-gray-600 text-xs font-medium rounded">
+                            {t}
+                          </span>
+                        ))}
+                        {(opp.trending || opp.status === 'HOT') && (
+                          <span className="px-2 py-1 bg-orange-50 text-orange-600 text-xs font-bold rounded">🔥 Trending</span>
+                        )}
+                        {(opp.closing_soon || opp.closingSoon) && (
+                          <span className="px-2 py-1 bg-red-50 text-red-600 text-xs font-bold rounded">⚡ Closing Soon</span>
+                        )}
+                        {opp.verified === false && (
+                          <span className="px-2 py-1 bg-yellow-50 text-yellow-700 text-xs font-bold rounded">⚠️ Unverified</span>
+                        )}
+                     </div>
+
+                     <div className="flex items-center justify-between pt-4 border-t border-gray-100 mt-auto gap-3">
+                       <div className={`flex items-center gap-1.5 text-xs sm:text-sm font-medium ${getDeadlineColor(opp.deadline)}`}>
+                         <Clock className="w-4 h-4" /> {opp.deadline || 'Deadline Unknown'}
+                       </div>
+                       <div className="flex items-center gap-2">
+                         <button 
+                           onClick={() => handleApplyAssist(opp)}
+                           className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors shadow-sm"
+                         >
+                           <FileText className="w-3.5 h-3.5" /> Apply Assist
+                         </button>
+                         {(opp.apply_link || opp.applyLink) && (
+                           <a 
+                             href={opp.apply_link || opp.applyLink} 
+                             target="_blank" 
+                             rel="noopener noreferrer" 
+                             onClick={() => trackInteraction(opp.id, 'apply')}
+                             className="clean-btn px-4 py-1.5 text-xs font-bold hover:shadow-md transition-shadow"
+                           >
+                             Apply Now
+                           </a>
+                         )}
+                       </div>
+                     </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
