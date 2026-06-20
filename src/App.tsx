@@ -142,7 +142,23 @@ function App() {
   };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-blue-600 font-bold tracking-widest uppercase">INITIALIZING SYSTEM...</div>;
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-white gap-6">
+        <div className="flex items-center gap-3 animate-pulse">
+           <div className="w-12 h-12 rounded-[12px] bg-[#2563EB] flex items-center justify-center shadow-lg shadow-blue-500/20">
+             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+           </div>
+           <h1 className="text-[28px] font-[800] tracking-tight text-gray-900">
+             Yuva<span className="text-[#2563EB]">Hub</span>
+           </h1>
+        </div>
+        <div className="flex gap-2">
+          <div className="w-2.5 h-2.5 rounded-full bg-[#2563EB] animate-bounce" style={{ animationDelay: '0ms' }}></div>
+          <div className="w-2.5 h-2.5 rounded-full bg-[#2563EB] animate-bounce" style={{ animationDelay: '150ms' }}></div>
+          <div className="w-2.5 h-2.5 rounded-full bg-[#2563EB] animate-bounce" style={{ animationDelay: '300ms' }}></div>
+        </div>
+      </div>
+    );
   }
 
   if (!user) {
@@ -162,10 +178,13 @@ function App() {
     <div className="flex h-screen bg-gray-50 text-gray-900 font-sans overflow-hidden">
       
       {/* Sidebar Desktop - Fixed 220px */}
-      <aside className="hidden lg:flex w-[220px] border-r border-gray-200 flex-col bg-white z-10 shrink-0 relative">
-        <div className="p-6 border-b border-gray-100 flex items-center justify-center">
-          <h1 className="text-2xl font-bold tracking-tight">
-            <span className="text-gray-900">Yuva</span><span className="text-blue-600">Hub</span>
+      <aside className="hidden lg:flex w-[220px] border-r border-[#E2E8F0] flex-col bg-white z-10 shrink-0 relative">
+        <div className="p-6 border-b border-[#E2E8F0] flex items-center justify-center gap-2">
+          <div className="w-[28px] h-[28px] rounded-lg bg-[#2563EB] flex items-center justify-center">
+             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          </div>
+          <h1 className="text-[17px] font-[700] tracking-tight text-gray-900">
+            YuvaHub
           </h1>
         </div>
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto no-scrollbar">
@@ -204,9 +223,14 @@ function App() {
 
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-16 border-b border-gray-200 bg-white z-50 flex items-center justify-between px-4">
-        <h1 className="text-xl font-bold">
-          <span className="text-gray-900">Yuva</span><span className="text-blue-600">Hub</span>
-        </h1>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-[#2563EB] flex items-center justify-center">
+             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          </div>
+          <h1 className="text-[17px] font-[700] tracking-tight text-gray-900">
+            YuvaHub
+          </h1>
+        </div>
         <div className="flex items-center gap-4">
           <NotificationDropdown profile={profile} />
           <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="text-gray-500 hover:text-gray-900">
@@ -253,18 +277,28 @@ function App() {
       <main className="flex-1 flex flex-col pt-16 lg:pt-0 h-screen overflow-hidden relative">
         
         {/* Topbar */}
-        <div className="hidden lg:flex h-16 border-b border-gray-200 bg-white items-center justify-between px-8 shrink-0">
-           <div className="flex-1 max-w-xl">
-             <p className="text-sm text-gray-500 font-medium">
-               {selectedOppId 
-                 ? "Detail Overview" 
-                 : (user ? `Welcome back, ${profile?.name || user.displayName || 'Student'}` : 'Welcome to YuvaHub')
-               }
-             </p>
+        <div className="hidden lg:flex h-[60px] border-b border-[#E2E8F0] bg-white items-center justify-between px-6 shrink-0">
+           <div className="flex-1 max-w-[500px] ml-8 mr-8">
+              {activeTab === 'opportunities' ? (
+                 <div className="relative">
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                       {/* SVG Icon using Lucide is imported as Search? Wait, I don't want to break imports, I'll use simple search icon. */}
+                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    </div>
+                    <input type="text" placeholder="Search standard competitions..." className="w-full bg-[#F8FAFC] border-none outline-none rounded-[8px] pl-10 pr-4 py-2 text-[14px]" />
+                 </div>
+              ) : (
+                 <p className="text-[14px] text-[#64748B] font-medium">
+                   {selectedOppId 
+                     ? "Detail Overview" 
+                     : (user ? `Welcome back, ${profile?.name || user.displayName || 'Student'}` : 'Welcome to YuvaHub')
+                   }
+                 </p>
+              )}
            </div>
-           <div className="flex items-center gap-6">
+           <div className="flex items-center gap-5">
               <NotificationDropdown profile={profile} />
-              <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm">
+              <div className="w-[32px] h-[32px] rounded-full bg-[#2563EB] text-white flex items-center justify-center font-bold text-[13px]">
                 {profile?.name ? profile.name.charAt(0).toUpperCase() : (user?.email?.charAt(0).toUpperCase() || 'U')}
               </div>
            </div>

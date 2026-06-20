@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, Globe, BrainCircuit } from 'lucide-react';
+import { Sparkles, Globe, BrainCircuit, Search, Zap, Code, Lightbulb, Trophy, Target, ArrowRight, Mail } from 'lucide-react';
 import { signInWithGoogle } from '../lib/firebase';
 
 export default function SplashAuth() {
@@ -16,78 +16,257 @@ export default function SplashAuth() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="w-full max-w-5xl grid lg:grid-cols-2 bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
-         
-         {/* Left Side - Visual */}
-         <div className="bg-gray-900 p-12 flex flex-col justify-between relative overflow-hidden hidden lg:flex">
-            <div className="absolute top-0 right-0 p-8 w-full flex justify-end opacity-20 pointer-events-none">
-               <Globe className="w-64 h-64 text-blue-500 animate-[spin_120s_linear_infinite]" />
+    <div className="min-h-screen bg-white font-sans text-gray-900 overflow-x-hidden">
+      {/* Navbar */}
+      <header className="sticky top-0 z-50 h-[60px] bg-white border-b border-[#E2E8F0] flex items-center justify-between px-6 lg:px-12">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-[#2563EB] flex items-center justify-center">
+            <Zap className="w-5 h-5 text-white" />
+          </div>
+          <span className="font-bold text-[17px] tracking-tight">YuvaHub</span>
+        </div>
+        
+        <nav className="hidden md:flex items-center gap-8 text-[14px] font-medium text-gray-700">
+          <a href="#" className="hover:text-[#2563EB] transition-colors">Learn</a>
+          <a href="#" className="hover:text-[#2563EB] transition-colors">Compete</a>
+          <a href="#" className="hover:text-[#2563EB] transition-colors">Jobs</a>
+          <a href="#" className="hover:text-[#2563EB] transition-colors">Mentorship</a>
+        </nav>
+        
+        <div className="flex items-center gap-4">
+          <button className="hidden sm:block px-4 py-2 text-[14px] font-medium border border-[#E2E8F0] rounded-[8px] hover:bg-gray-50 transition-colors">
+            Host Event
+          </button>
+          <button onClick={handleLogin} disabled={loading} className="px-5 py-2 text-[14px] font-medium bg-[#2563EB] text-white rounded-[8px] hover:bg-blue-700 transition-colors disabled:opacity-50">
+            {loading ? 'Wait...' : 'Login'}
+          </button>
+        </div>
+      </header>
+
+      {/* Hero Section */}
+      <section className="px-6 lg:px-12 py-16 lg:py-24 max-w-7xl mx-auto grid lg:grid-cols-2 gap-10 items-center">
+        <div>
+          <div className="inline-block px-3 py-1 bg-[#FFF7ED] border border-orange-200 text-[#F97316] text-[11px] font-bold uppercase tracking-wide rounded-full mb-6">
+            ⚡ Connecting Talent to Opportunity
+          </div>
+          <h1 className="text-[46px] font-[800] leading-[1.12] text-gray-900 mb-6">
+            Unlock Your <span className="text-[#2563EB] italic">Career</span> Potential
+          </h1>
+          <p className="text-[16px] text-[#64748B] leading-[1.65] mb-8 max-w-lg">
+            Join the premier network matching ambitious students with real-world competitions, hackathons, and tech roles globally.
+          </p>
+          
+          <div className="relative max-w-md shadow-sm border border-[#E2E8F0] rounded-[10px] bg-white flex items-center p-1 mb-6">
+            <Search className="w-5 h-5 text-gray-400 ml-3 shrink-0" />
+            <input 
+              type="text" 
+              placeholder="Search companies, competitions, jobs..." 
+              className="flex-1 bg-transparent border-none outline-none text-[13px] px-3 py-2 text-gray-900"
+            />
+            <button onClick={handleLogin} className="bg-[#F97316] text-white text-[13px] font-bold px-5 py-[13px] rounded-[6px] hover:bg-orange-600 transition-colors">
+              Search
+            </button>
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-[12px] font-medium text-gray-500">Trending:</span>
+            {['Generative AI', 'Web3', 'Product Management', 'Data Science'].map(t => (
+              <span key={t} className="px-3 py-1 bg-[#F8FAFC] border border-[#E2E8F0] text-gray-700 text-[12px] rounded-[100px]">
+                {t}
+              </span>
+            ))}
+          </div>
+        </div>
+        
+        <div className="relative h-[400px] w-full rounded-[20px] bg-gradient-to-br from-[#EFF6FF] to-[#F0FDF4] shadow-lg border border-white flex items-center justify-center p-8">
+           <div className="absolute top-[10%] left-[10%] w-[120px] bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center gap-2 animate-float" style={{ animationDelay: '0s' }}>
+              <span className="text-3xl">🚀</span>
+              <span className="text-[10px] font-bold">Landed job at Google</span>
+           </div>
+           <div className="absolute bottom-[20%] right-[5%] w-[130px] bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center gap-2 animate-float" style={{ animationDelay: '0.8s' }}>
+              <span className="text-3xl">🏆</span>
+              <span className="text-[10px] font-bold">Won ETHGlobal</span>
+           </div>
+           <div className="absolute top-[40%] right-[15%] w-[100px] bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex flex-col items-center gap-2 animate-float" style={{ animationDelay: '1.5s' }}>
+              <span className="text-3xl">💡</span>
+              <span className="text-[10px] font-bold">Top 10 Finalist</span>
+           </div>
+           <div className="w-64 h-64 bg-white/40 backdrop-blur-md rounded-full absolute border border-white/60"></div>
+        </div>
+      </section>
+
+      {/* Explore Your Interest */}
+      <section className="bg-[#F8FAFC] py-20 px-6 lg:px-12">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-[28px] font-[700] text-gray-900 mb-3">Explore Your Interest</h2>
+            <p className="text-[15px] text-[#64748B]">Find standard competitions tailored to your skills and domain.</p>
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[20px]">
+             {[ 
+               { title: 'Coding & Tech', sub: 'Hackathons, DSA', icon: Code, bg: '#DBEAFE', border: '#BFDBFE', text: '#1E3A8A' },
+               { title: 'Business & Mgmt', sub: 'Case studies', icon: Lightbulb, bg: '#FEF3C7', border: '#FDE68A', text: '#92400E' },
+               { title: 'Design & UX', sub: 'UI/UX Challenges', icon: Target, bg: '#D1FAE5', border: '#A7F3D0', text: '#065F46' },
+               { title: 'Cultural & Arts', sub: 'Festivals, Media', icon: Sparkles, bg: '#EDE9FE', border: '#DDD6FE', text: '#5B21B6' }
+             ].map((cat, i) => (
+                <div key={i} className="bg-white rounded-[14px] p-7 flex flex-col items-center text-center shadow-sm border border-[#E2E8F0] transition-all duration-200 hover:-translate-y-[2px] hover:border-blue-300 hover:shadow-[0_0_0_3px_#DBEAFE] cursor-pointer">
+                   <div className="w-[52px] h-[52px] rounded-[14px] flex items-center justify-center mb-4" style={{ backgroundColor: cat.bg, color: cat.text }}>
+                      <cat.icon className="w-6 h-6" />
+                   </div>
+                   <h3 className="text-[15px] font-[600] text-gray-900 mb-1">{cat.title}</h3>
+                   <p className="text-[12px] text-[#64748B]">{cat.sub}</p>
+                </div>
+             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Featured Competitions */}
+      <section className="py-20 px-6 lg:px-12 max-w-7xl mx-auto">
+         <div className="flex items-center justify-between mb-10">
+            <h2 className="text-[28px] font-[700] text-gray-900">Featured Competitions</h2>
+            <a href="#" onClick={handleLogin} className="text-[#2563EB] font-bold text-[14px] hover:underline flex items-center gap-1">View All <ArrowRight className="w-4 h-4" /></a>
+         </div>
+
+         <div className="grid grid-cols-1 md:grid-cols-3 gap-[20px]">
+            {/* Card 1 */}
+            <div className="bg-white border border-[#E2E8F0] rounded-[12px] overflow-hidden shadow-sm hover:shadow-md hover:-translate-y-[3px] transition-all duration-200 cursor-pointer">
+               <div className="h-[150px] bg-gradient-to-br from-[#0F172A] to-[#1E3A8A] flex items-center justify-center relative p-4">
+                  <div className="absolute top-3 left-3 px-2 py-1 bg-[#16A34A] text-white text-[10px] font-bold uppercase rounded-full">LIVE</div>
+                  <h3 className="text-white text-xl font-black tracking-widest text-center opacity-80 mt-2">HACKATHON 2024</h3>
+               </div>
+               <div className="p-5">
+                  <div className="flex items-center gap-3 mb-3">
+                     <div className="w-[22px] h-[22px] rounded-[5px] bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold">ML</div>
+                     <span className="text-[13px] text-[#64748B] font-medium">Major League Hacking</span>
+                  </div>
+                  <h4 className="text-[15px] font-[600] text-gray-900 mb-3 line-clamp-2">Global Innovation Challenge: AI & Web3</h4>
+                  <div className="flex items-center text-[12px] text-[#64748B] justify-between">
+                     <span>📅 Apr 15 - Apr 17</span>
+                     <span>👥 1,204 Registered</span>
+                  </div>
+               </div>
+            </div>
+
+            {/* Card 2 */}
+            <div className="bg-white border border-[#E2E8F0] rounded-[12px] overflow-hidden shadow-sm hover:shadow-md hover:-translate-y-[3px] transition-all duration-200 cursor-pointer">
+               <div className="h-[150px] bg-[#F1F5F9] flex items-center justify-center relative p-4">
+                  <div className="absolute top-3 left-3 px-2 py-1 bg-[#F97316] text-white text-[10px] font-bold uppercase rounded-full">PREMIUM</div>
+                  <Trophy className="w-16 h-16 text-gray-300" />
+               </div>
+               <div className="p-5">
+                  <div className="flex items-center gap-3 mb-3">
+                     <div className="w-[22px] h-[22px] rounded-[5px] bg-purple-100 text-purple-700 flex items-center justify-center text-[10px] font-bold">ST</div>
+                     <span className="text-[13px] text-[#64748B] font-medium">Stanford Univ</span>
+                  </div>
+                  <h4 className="text-[15px] font-[600] text-gray-900 mb-3 line-clamp-2">Stanford Business Case Competition 2025</h4>
+                  <div className="flex items-center text-[12px] text-[#64748B] justify-between">
+                     <span>📅 May 01 - May 05</span>
+                     <span>👥 850 Registered</span>
+                  </div>
+               </div>
+            </div>
+
+            {/* Card 3 */}
+            <div className="bg-white border border-[#E2E8F0] rounded-[12px] overflow-hidden shadow-sm hover:shadow-md hover:-translate-y-[3px] transition-all duration-200 cursor-pointer">
+               <div className="h-[150px] bg-[#F1F5F9] flex items-center justify-center relative p-4">
+                  <div className="absolute top-3 left-3 px-2 py-1 bg-[#16A34A] text-white text-[10px] font-bold uppercase rounded-full">FREE</div>
+                  <Target className="w-16 h-16 text-gray-300" />
+               </div>
+               <div className="p-5">
+                  <div className="flex items-center gap-3 mb-3">
+                     <div className="w-[22px] h-[22px] rounded-[5px] bg-orange-100 text-orange-700 flex items-center justify-center text-[10px] font-bold">GO</div>
+                     <span className="text-[13px] text-[#64748B] font-medium">Google Developer Groups</span>
+                  </div>
+                  <h4 className="text-[15px] font-[600] text-gray-900 mb-3 line-clamp-2">Solution Challenge India Regional</h4>
+                  <div className="flex items-center text-[12px] text-[#64748B] justify-between">
+                     <span>📅 Mar 10 - Jun 20</span>
+                     <span>👥 5,200 Registered</span>
+                  </div>
+               </div>
+            </div>
+         </div>
+      </section>
+
+      {/* Stats Bar */}
+      <section className="bg-[#1D4ED8] py-[52px] px-6">
+         <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-center gap-10 md:gap-[80px] text-center">
+            <div>
+               <div className="text-[40px] font-[800] text-white">5M+</div>
+               <div className="text-[13px] uppercase tracking-[0.1em] text-white/80 mt-1 font-medium">Users</div>
+            </div>
+            <div className="hidden md:block w-px h-[40px] bg-white/20"></div>
+            <div>
+               <div className="text-[40px] font-[800] text-white">100k+</div>
+               <div className="text-[13px] uppercase tracking-[0.1em] text-white/80 mt-1 font-medium">Events</div>
+            </div>
+            <div className="hidden md:block w-px h-[40px] bg-white/20"></div>
+            <div>
+               <div className="text-[40px] font-[800] text-white">2k+</div>
+               <div className="text-[13px] uppercase tracking-[0.1em] text-white/80 mt-1 font-medium">Companies</div>
+            </div>
+            <div className="hidden md:block w-px h-[40px] bg-white/20"></div>
+            <div>
+               <div className="text-[40px] font-[800] text-white">500k+</div>
+               <div className="text-[13px] uppercase tracking-[0.1em] text-white/80 mt-1 font-medium">Hired</div>
+            </div>
+         </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-white pt-20 pb-8 px-6 lg:px-12 max-w-7xl mx-auto">
+         <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_2fr] gap-10 mb-16">
+            <div className="max-w-[220px]">
+               <div className="flex items-center gap-2 mb-4">
+                  <div className="w-6 h-6 rounded-md bg-[#2563EB] flex items-center justify-center">
+                     <Zap className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  <span className="font-bold text-[15px] tracking-tight text-gray-900">YuvaHub</span>
+               </div>
+               <p className="text-[13px] text-[#64748B] leading-relaxed">
+                 Connecting the world's brightest minds to the most challenging opportunities globally.
+               </p>
             </div>
             
-            <div className="relative z-10">
-               <h1 className="text-3xl font-bold tracking-tight text-white mb-2">
-                 Yuva<span className="text-blue-500">Hub</span>
-               </h1>
-               <div className="w-12 h-1 bg-blue-600 mb-8 mt-4 rounded-full"></div>
+            <div className="flex flex-col gap-[9px]">
+               <h4 className="font-bold text-gray-900 mb-2">Competitions</h4>
+               <a href="#" className="text-[13px] text-[#64748B] hover:text-[#2563EB]">Hackathons</a>
+               <a href="#" className="text-[13px] text-[#64748B] hover:text-[#2563EB]">Quizzes</a>
+               <a href="#" className="text-[13px] text-[#64748B] hover:text-[#2563EB]">Hiring Challenges</a>
+               <a href="#" className="text-[13px] text-[#64748B] hover:text-[#2563EB]">Case Studies</a>
             </div>
 
-            <div className="relative z-10 space-y-8">
-               <div className="flex items-start gap-4">
-                 <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
-                    <Sparkles className="w-5 h-5 text-blue-400" />
-                 </div>
-                 <div>
-                    <h3 className="text-lg font-bold text-white">AI-Powered matching</h3>
-                    <p className="text-gray-400 text-sm mt-1">Get automatically matched with opportunities based on your specific skills and experience.</p>
-                 </div>
-               </div>
-               <div className="flex items-start gap-4">
-                 <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
-                    <BrainCircuit className="w-5 h-5 text-blue-400" />
-                 </div>
-                 <div>
-                    <h3 className="text-lg font-bold text-white">Real-time Intelligence</h3>
-                    <p className="text-gray-400 text-sm mt-1">Our crawler monitors thousands of sources constantly to bring you the best events as they happen.</p>
-                 </div>
-               </div>
+            <div className="flex flex-col gap-[9px]">
+               <h4 className="font-bold text-gray-900 mb-2">Opportunities</h4>
+               <a href="#" className="text-[13px] text-[#64748B] hover:text-[#2563EB]">Internships</a>
+               <a href="#" className="text-[13px] text-[#64748B] hover:text-[#2563EB]">Full Time Jobs</a>
+               <a href="#" className="text-[13px] text-[#64748B] hover:text-[#2563EB]">Scholarships</a>
+               <a href="#" className="text-[13px] text-[#64748B] hover:text-[#2563EB]">Fellowships</a>
             </div>
 
-            <div className="relative z-10 pt-16">
-               <p className="text-gray-400 text-xs font-medium uppercase tracking-widest">Connect . Learn . Grow</p>
+            <div>
+               <h4 className="font-bold text-gray-900 mb-2">Stay Updated</h4>
+               <p className="text-[13px] text-[#64748B] mb-4">Get the latest opportunities right in your inbox.</p>
+               <div className="flex border border-[#E2E8F0] rounded-[8px] overflow-hidden focus-within:border-[#2563EB] focus-within:ring-1 focus-within:ring-[#2563EB] transition-all">
+                  <div className="bg-white flex items-center pl-3">
+                     <Mail className="w-4 h-4 text-gray-400" />
+                  </div>
+                  <input type="email" placeholder="Email address" className="flex-1 text-[13px] px-3 py-2.5 outline-none bg-transparent text-gray-900" />
+                  <button className="bg-[#2563EB] text-white px-4 py-2.5 text-[13px] font-bold hover:bg-blue-700 transition-colors">Join</button>
+               </div>
             </div>
          </div>
 
-         {/* Right Side - Auth */}
-         <div className="p-12 lg:p-16 flex flex-col justify-center">
-            <div className="max-w-sm mx-auto w-full">
-              <div className="mb-12 text-center lg:text-left">
-                <h2 className="text-3xl font-bold text-gray-900 mb-3">Welcome User</h2>
-                <p className="text-gray-500 text-sm font-medium">Join the intelligence network connecting students with top opportunities.</p>
-              </div>
-
-              <div className="space-y-4">
-                 <button 
-                  onClick={handleLogin}
-                  disabled={loading}
-                  className="w-full flex items-center justify-center gap-3 bg-white border border-gray-200 text-gray-700 font-bold py-4 px-6 rounded-xl shadow-sm hover:shadow-md hover:border-gray-300 transition-all cursor-pointer disabled:opacity-50"
-                 >
-                    {loading ? (
-                      <span className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
-                    )}
-                    {loading ? 'Authenticating...' : 'Sign in with Google'}
-                 </button>
-              </div>
-              
-              <div className="mt-12 text-center text-xs text-gray-400">
-                 By continuing, you agree to our Terms of Service and Privacy Policy.
-              </div>
+         <div className="pt-6 border-t border-[#E2E8F0] flex flex-col md:flex-row items-center justify-between gap-4">
+            <span className="text-[13px] text-[#64748B]">&copy; 2026 YuvaHub Inc. All rights reserved.</span>
+            <div className="flex gap-6">
+               <a href="#" className="text-[13px] text-[#64748B] hover:text-gray-900">Privacy Policy</a>
+               <a href="#" className="text-[13px] text-[#64748B] hover:text-gray-900">Terms of Service</a>
+               <a href="#" className="text-[13px] text-[#64748B] hover:text-gray-900">Contact Us</a>
             </div>
          </div>
-
-      </div>
+      </footer>
     </div>
   );
 }

@@ -238,10 +238,26 @@ async function startServer() {
       const ai = getGenAI();
       if (!ai) return res.json({ text: "AI generation is currently disabled." });
       
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt
-      });
+      let response;
+      try {
+        response = await ai.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: prompt
+        });
+      } catch (err: any) {
+        const is503 = err?.status === 503 || err?.message?.includes('503') || err?.message?.includes('high demand');
+        const isTimeout = err?.message?.toLowerCase().includes('timeout') || err?.message?.toLowerCase().includes('abort');
+        const is429 = err?.status === 429 || err?.message?.includes('429') || err?.message?.includes('Quota exceeded') || err?.message?.includes('RESOURCE_EXHAUSTED');
+        if (is503 || isTimeout || is429) {
+          console.warn(`Gemini 3.5-flash error (${err?.status || 'network'}), retrying with gemini-3.1-flash-lite...`);
+          response = await ai.models.generateContent({
+            model: "gemini-3.1-flash-lite",
+            contents: prompt
+          });
+        } else {
+          throw err;
+        }
+      }
       res.json({ text: response.text });
     } catch (err) {
       console.error("AI Gen Error:", err);
@@ -273,11 +289,28 @@ Return JSON strictly in this format:
   "suggestions": ["...", "..."]
 }`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt,
-        config: { responseMimeType: "application/json" }
-      });
+      let response;
+      try {
+        response = await ai.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: prompt,
+          config: { responseMimeType: "application/json" }
+        });
+      } catch (err: any) {
+        const is503 = err?.status === 503 || err?.message?.includes('503') || err?.message?.includes('high demand');
+        const isTimeout = err?.message?.toLowerCase().includes('timeout') || err?.message?.toLowerCase().includes('abort');
+        const is429 = err?.status === 429 || err?.message?.includes('429') || err?.message?.includes('Quota exceeded') || err?.message?.includes('RESOURCE_EXHAUSTED');
+        if (is503 || isTimeout || is429) {
+          console.warn(`Gemini 3.5-flash error (${err?.status || 'network'}), retrying with gemini-3.1-flash-lite...`);
+          response = await ai.models.generateContent({
+            model: "gemini-3.1-flash-lite",
+            contents: prompt,
+            config: { responseMimeType: "application/json" }
+          });
+        } else {
+          throw err;
+        }
+      }
       res.json(JSON.parse(response.text || "{}"));
     } catch (err) {
       console.error("Resume Review Error:", err);

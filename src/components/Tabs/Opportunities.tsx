@@ -1,455 +1,209 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Sparkles, Clock, Zap, CheckCircle, X, Loader2, Copy, Globe, Bookmark, Share2, FileText, Compass } from 'lucide-react';
-import { UserProfile, Opportunity } from '../../types';
-import { searchOpportunities, trackInteraction, refineQueryBackend, generateApplyAssistBackend } from '../../services/apiClient';
-import ShareModal from '../ui/ShareModal';
-import ApplyAssistModal from '../ui/ApplyAssistModal';
+import { Search, Filter, Users, ChevronRight, Clock, Star, Share2, Copy } from 'lucide-react';
+import { UserProfile } from '../../types';
+import { searchOpportunities, trackInteraction } from '../../services/apiClient';
 
 export default function Opportunities({ user, profile, onViewDetails }: { user: any, profile: UserProfile | null, onViewDetails?: (id: string, title?: string) => void }) {
-  const [filter, setFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  
-  const [isSearchingLive, setIsSearchingLive] = useState(false);
   const [searchData, setSearchData] = useState<any>(null);
-  const [hasSearched, setHasSearched] = useState(false);
-  const [shareOpp, setShareOpp] = useState<{title: string, link: string} | null>(null);
-  const [discoveryMode, setDiscoveryMode] = useState<'smart' | 'explore'>('smart');
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  const [advancedFilters, setAdvancedFilters] = useState<{remote: boolean; location: string; days: string; company: string}>({
-    remote: false, location: '', days: '', company: ''
+  const [loading, setLoading] = useState(true);
+  
+  // Filter states
+  const [filters, setFilters] = useState({
+    status: { 'Live': true, 'Upcoming': false, 'Closed': false },
+    type: { 'Hackathons': true, 'Quizzes': true, 'Internships': false, 'Jobs': false },
+    eligibility: { 'College Students': true, 'Professionals': false }
   });
 
-  // Apply Assist State
-  const [isAssistModalOpen, setIsAssistModalOpen] = useState(false);
-  const [assistLoading, setAssistLoading] = useState(false);
-  const [assistContent, setAssistContent] = useState<string | null>(null);
-  const [assistingOpp, setAssistingOpp] = useState<any>(null);
-
-  const filledFields = [profile?.year, profile?.field, profile?.college, profile?.skills && profile.skills.length > 0].filter(Boolean).length;
-  const strength = Math.round((filledFields / 4) * 100);
-
-  const FILTERS = ['All', 'Internships', 'Hackathons', 'Scholarships', 'Jobs', 'Fellowships', 'Events', 'Programs'];
-  const QUICK_ZAPS = ['GSoC Projects', 'Stanford Scholarships', 'UN Fellowships', 'Microsoft Internships'];
-
   useEffect(() => {
-    if (!hasSearched && profile && strength >= 50) {
-      let defaultQuery = "Student opportunities";
-      if (profile.field) {
-        defaultQuery = `${profile.field} opportunities`;
-      }
-      if (profile.year) {
-        defaultQuery += ` for ${profile.year} year students`;
-      }
-      // Do not set searchQuery here so the search bar stays empty.
-      handleLiveSearch(defaultQuery, filter);
-    }
-  }, [profile, hasSearched, filter, strength]);
+    // Initial fetch
+    fetchData("Student opportunities");
+  }, []);
 
-  const handleLiveSearch = async (queryToSearch: string, filterToUse: string = filter, advSettings = advancedFilters) => {
-    if (!queryToSearch.trim()) return;
-    
-    // Clear existing results to show loading state
-    setIsSearchingLive(true);
-    setHasSearched(true);
-    
+  const fetchData = async (q: string) => {
+    setLoading(true);
     try {
-      let query = queryToSearch;
-      if (discoveryMode === 'smart') {
-         query = await refineQueryBackend(queryToSearch, profile);
-      }
-      
-      const advOpt: any = { remote: advSettings.remote };
-      if (advSettings.location) advOpt.location = advSettings.location;
-      if (advSettings.days) advOpt.days = parseInt(advSettings.days);
-      if (advSettings.company) advOpt.company = advSettings.company;
-
-      const results = await searchOpportunities(query, filterToUse, 1, advOpt);
+      const typeStr = filters.type.Internships ? 'Internship' : (filters.type.Hackathons ? 'Hackathon' : 'All');
+      const results = await searchOpportunities(q || searchQuery || "Opportunities", typeStr, 1, {});
       setSearchData(results);
     } catch (e) {
-      console.error("Search failed:", e);
-      setSearchData(null);
-    } finally {
-      setIsSearchingLive(false);
-    }
-  };
-
-  // Debounced search effect
-  useEffect(() => {
-    if (hasSearched && searchQuery) {
-      const timer = setTimeout(() => {
-        handleLiveSearch(searchQuery, filter, advancedFilters);
-      }, 800);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, advancedFilters]);
-
-  const handleFilterClick = (f: string) => {
-    setFilter(f);
-    let queryToRun = searchQuery;
-    if (!queryToRun.trim() && profile) {
-      queryToRun = "Student opportunities";
-      if (profile.field) queryToRun = `${profile.field} opportunities`;
-      if (profile.year) queryToRun += ` for ${profile.year} year students`;
-    }
-    handleLiveSearch(queryToRun, f, advancedFilters);
-  };
-
-  const handleApplyAssist = async (opp: any) => {
-    setAssistingOpp(opp);
-    setAssistContent(null);
-    setIsAssistModalOpen(true);
-    setAssistLoading(true);
-    
-    try {
-      const result = await generateApplyAssistBackend({
-        title: opp.title,
-        organization: opp.org || opp.organization
-      }, profile);
-      const content = typeof result === 'string' ? result : result.content;
-      setAssistContent(content || "Unable to generate draft.");
-    } catch (e) {
       console.error(e);
-      setAssistContent("Failed to generate application assistant draft. Please try again.");
     } finally {
-      setAssistLoading(false);
+      setLoading(false);
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      let queryToRun = searchQuery;
-      if (!queryToRun.trim() && profile) {
-        queryToRun = "Student opportunities";
-        if (profile.field) queryToRun = `${profile.field} opportunities`;
-        if (profile.year) queryToRun += ` for ${profile.year} year students`;
-      }
-      handleLiveSearch(queryToRun);
-    }
+  const clearFilters = () => {
+    setFilters({
+      status: { 'Live': false, 'Upcoming': false, 'Closed': false },
+      type: { 'Hackathons': false, 'Quizzes': false, 'Internships': false, 'Jobs': false },
+      eligibility: { 'College Students': false, 'Professionals': false }
+    });
   };
 
-  const getDeadlineColor = (daysStr: string) => {
-    if (!daysStr) return 'text-gray-500';
-    if (daysStr.toLowerCase().includes('rolling')) return 'text-green-600';
-    
-    const daysMatch = daysStr.match(/(\d+)\s+days/i);
-    if (daysMatch) {
-      const days = parseInt(daysMatch[1]);
-      if (days < 10) return 'text-red-500 font-bold';
-      if (days < 30) return 'text-amber-500 font-bold';
-      return 'text-green-600';
-    }
-    return 'text-gray-600'; // Default
+  const getThumbStyle = (type: string) => {
+    const t = (type || '').toLowerCase();
+    if (t.includes('hackathon')) return 'bg-gradient-to-br from-[#0F172A] to-[#1E3A8A] text-white';
+    if (t.includes('quiz')) return 'bg-[#F8F9FF] border-b border-[#E2E8F0]';
+    if (t.includes('course') || t.includes('coding')) return 'bg-[#F0FDF4] border-b border-[#E2E8F0]';
+    return 'bg-[#FFF7ED] border-b border-[#E2E8F0]';
+  };
+
+  const getBadgeStyle = (type: string) => {
+    const t = type.toUpperCase();
+    if (t.includes('HACKATHON')) return 'bg-blue-100 text-blue-700';
+    if (t.includes('LIVE')) return 'bg-green-100 text-green-700';
+    if (t.includes('QUIZ')) return 'bg-purple-100 text-purple-700';
+    if (t.includes('CODING')) return 'bg-green-100 text-green-700';
+    return 'bg-orange-100 text-orange-700';
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 relative">
+    <div className="max-w-[1200px] mx-auto flex items-start gap-8 font-sans pb-12">
       
-      {strength < 50 && (
-        <div className="clean-card p-6 border-amber-200 bg-amber-50 mb-8 flex justify-between items-center flex-wrap gap-4">
-          <div>
-            <h3 className="text-amber-800 font-bold text-lg">⚠️ Profile Incomplete ({strength}%)</h3>
-            <p className="text-amber-700 text-sm mt-1">Complete your profile to unlock highly personalized, AI-matched opportunities.</p>
-          </div>
-        </div>
-      )}
+      {/* Left Sidebar - Filters */}
+      <aside className="w-[220px] shrink-0 hidden md:block">
+         <div className="flex items-center gap-2 mb-6">
+            <Filter className="w-5 h-5 text-gray-700" />
+            <h2 className="text-[15px] font-[700] text-gray-900">Filters</h2>
+         </div>
 
-      {/* Search & Filters */}
-      <div className="space-y-6">
-        <div className="flex flex-wrap gap-2">
-          {FILTERS.map(f => (
-            <button 
-              key={f}
-              onClick={() => handleFilterClick(f)}
-              className={`px-4 py-2 text-sm font-semibold rounded-full transition-all ${filter === f ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-gray-700 border border-gray-200 hover:border-blue-300 hover:bg-blue-50'}`}
-            >
-              {f}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-medium text-gray-500 flex items-center gap-1">
-              <Zap className="w-4 h-4" /> Zap shortcuts:
-            </span>
-            {QUICK_ZAPS.map(z => (
-              <button key={z} onClick={() => { setSearchQuery(z); handleLiveSearch(z); }} className="px-3 py-1 bg-white border border-gray-200 hover:border-blue-400 text-sm text-gray-700 rounded-md transition-colors shadow-sm cursor-pointer">
-                {z}
-              </button>
-            ))}
-          </div>
-          <button 
-            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-            className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1 border border-blue-200 bg-blue-50 px-3 py-1.5 rounded-md"
-          >
-            {showAdvancedFilters ? 'Hide Advanced Filters' : 'Advanced Filters'}
-          </button>
-        </div>
-
-        {showAdvancedFilters && (
-          <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl grid grid-cols-1 md:grid-cols-4 gap-4 animate-fade-in">
+         {/* Filter Groups */}
+         <div className="space-y-8">
+            {/* Status */}
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Location</label>
-              <input 
-                type="text" 
-                placeholder="e.g. India, US, London" 
-                className="clean-input w-full text-sm py-2 px-3"
-                value={advancedFilters.location}
-                onChange={e => setAdvancedFilters({...advancedFilters, location: e.target.value})}
-              />
+               <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.1em] mb-4">Status</h3>
+               <div className="space-y-2.5">
+                  {Object.keys(filters.status).map(k => (
+                     <label key={k} className="flex items-center gap-3 cursor-pointer group">
+                        <input type="checkbox" checked={(filters.status as any)[k]} onChange={(e) => setFilters(f => ({...f, status: {...f.status, [k]: e.target.checked}}))} className="w-4 h-4 rounded border-gray-300 text-[#2563EB] focus:ring-[#2563EB]" />
+                        <span className="text-[13px] text-[#0F172A] group-hover:text-[#2563EB] transition-colors">{k}</span>
+                     </label>
+                  ))}
+               </div>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Company / Org</label>
-              <input 
-                type="text" 
-                placeholder="e.g. Google, Microsoft" 
-                className="clean-input w-full text-sm py-2 px-3"
-                value={advancedFilters.company}
-                onChange={e => setAdvancedFilters({...advancedFilters, company: e.target.value})}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Max Deadline (Days)</label>
-              <select 
-                className="clean-input w-full text-sm py-2 px-3"
-                value={advancedFilters.days}
-                onChange={e => setAdvancedFilters({...advancedFilters, days: e.target.value})}
-              >
-                <option value="">Any Time</option>
-                <option value="7">Next 7 days</option>
-                <option value="15">Next 15 days</option>
-                <option value="30">Next 30 days</option>
-              </select>
-            </div>
-            <div className="flex items-end pb-2">
-              <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-gray-700">
-                <input 
-                  type="checkbox" 
-                  checked={advancedFilters.remote}
-                  onChange={e => setAdvancedFilters({...advancedFilters, remote: e.target.checked})}
-                  className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                />
-                Remote / Online Only
-              </label>
-            </div>
-          </div>
-        )}
 
-        <div className="relative flex flex-col md:flex-row gap-4 items-center">
-          <div className="flex items-center bg-gray-100 p-1 rounded-full relative shrink-0 overflow-hidden">
-            <div 
-              className={`absolute inset-y-1 w-[110px] rounded-full bg-white shadow-sm transition-all duration-300 ease-out`}
-              style={{ left: discoveryMode === 'smart' ? '4px' : 'calc(100% - 114px)' }}
-            />
-            <button
-              onClick={() => setDiscoveryMode('smart')}
-              className={`relative w-[110px] z-10 flex items-center justify-center gap-2 py-2 px-3 rounded-full text-xs font-bold transition-colors ${discoveryMode === 'smart' ? 'text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              Smart Match
-            </button>
-            <button
-              onClick={() => setDiscoveryMode('explore')}
-              className={`relative w-[110px] z-10 flex items-center justify-center gap-2 py-2 px-3 rounded-full text-xs font-bold transition-colors ${discoveryMode === 'explore' ? 'text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              <Compass className="w-3.5 h-3.5" />
-              Explore
-            </button>
-          </div>
+            {/* Type */}
+            <div>
+               <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.1em] mb-4">Opportunity Type</h3>
+               <div className="space-y-2.5">
+                  {Object.keys(filters.type).map(k => (
+                     <label key={k} className="flex items-center gap-3 cursor-pointer group">
+                        <input type="checkbox" checked={(filters.type as any)[k]} onChange={(e) => setFilters(f => ({...f, type: {...f.type, [k]: e.target.checked}}))} className="w-4 h-4 rounded border-gray-300 text-[#2563EB] focus:ring-[#2563EB]" />
+                        <span className="text-[13px] text-[#0F172A] group-hover:text-[#2563EB] transition-colors">{k}</span>
+                     </label>
+                  ))}
+               </div>
+            </div>
 
-          <div className="relative flex-1 w-full">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5 pointer-events-none" />
+            {/* Eligibility */}
+            <div>
+               <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.1em] mb-4">Eligibility</h3>
+               <div className="space-y-2.5">
+                  {Object.keys(filters.eligibility).map(k => (
+                     <label key={k} className="flex items-center gap-3 cursor-pointer group">
+                        <input type="checkbox" checked={(filters.eligibility as any)[k]} onChange={(e) => setFilters(f => ({...f, eligibility: {...f.eligibility, [k]: e.target.checked}}))} className="w-4 h-4 rounded border-gray-300 text-[#2563EB] focus:ring-[#2563EB]" />
+                        <span className="text-[13px] text-[#0F172A] group-hover:text-[#2563EB] transition-colors">{k}</span>
+                     </label>
+                  ))}
+               </div>
+            </div>
+         </div>
+
+         <button onClick={clearFilters} className="mt-10 w-full py-2.5 border-[1.5px] border-[#E2E8F0] text-[#2563EB] text-[13px] font-bold rounded-[8px] hover:bg-[#EFF6FF] transition-colors">
+            Clear Filters
+         </button>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 min-w-0">
+         
+         {/* Search Header for Mobile */}
+         <div className="md:hidden relative mb-6">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input 
               type="text" 
-              placeholder="Search live opportunities..." 
+              placeholder="Search standard competitions..." 
+              className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[8px] px-10 py-3 text-[14px]"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={handleKeyDown}
-              className="clean-input w-full pl-12 pr-4 py-3 shadow-sm border-gray-200"
+              onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && fetchData(searchQuery)}
             />
-          </div>
-          <button 
-            onClick={() => {
-              let queryToRun = searchQuery;
-              if (!queryToRun.trim() && profile) {
-                queryToRun = "Student opportunities";
-                if (profile.field) queryToRun = `${profile.field} opportunities`;
-                if (profile.year) queryToRun += ` for ${profile.year} year students`;
-              }
-              handleLiveSearch(queryToRun);
-            }}
-            disabled={isSearchingLive}
-            className="clean-btn w-full md:w-auto px-6 py-3 shrink-0 flex justify-center shadow-md"
-          >
-             Search
-          </button>
-        </div>
-      </div>
+         </div>
 
-      {/* Results */}
-      <div className="space-y-6">
-        {isSearchingLive ? (
-          <div className="py-24 flex flex-col items-center justify-center space-y-4 clean-card">
-             <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
-             <p className="font-semibold text-gray-600">Discovering more opportunities for you 🚀</p>
-          </div>
-        ) : hasSearched && (!searchData || !searchData.results || searchData.results.length === 0) ? (
-          <div className="py-20 text-center clean-card border-dashed">
-             <p className="text-gray-500 font-medium">Looking for something specific? We're updating our results constantly.</p>
-          </div>
-        ) : searchData?.results && (
-          <div className="space-y-6">
-            {searchData.isFallback && (
-              <div className="bg-blue-50/40 text-blue-800 p-4 rounded-lg flex items-center gap-3 border border-blue-100/50 backdrop-blur-sm">
-                <Sparkles className="w-5 h-5 shrink-0 text-blue-500" />
-                <p className="text-sm font-medium">Showing curated opportunities while we refresh new matches ✨</p>
-              </div>
-            )}
-            <div className="bg-blue-50 text-blue-800 p-4 rounded-lg flex items-start gap-3 border border-blue-100">
-              <Sparkles className="w-5 h-5 mt-0.5 shrink-0 text-blue-600" />
-              <div>
-                <p className="text-sm font-medium">{searchData.meta?.agent_note || 'Found matching opportunities based on your profile.'}</p>
-                {searchData.refinement_suggestions && searchData.refinement_suggestions.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {searchData.refinement_suggestions.map((s: any) => (
-                      <button 
-                        key={s.label}
-                        onClick={() => { setSearchQuery(s.query); handleLiveSearch(s.query); }}
-                        className="text-xs bg-white text-blue-700 px-3 py-1.5 rounded-full border border-blue-200 hover:bg-blue-100 transition-colors shadow-sm"
-                      >
-                        Try: {s.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+         {loading ? (
+            <div className="flex py-20 justify-center">
+               <div className="w-8 h-8 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin"></div>
             </div>
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              {searchData.results.map((opp: any, idx: number) => {
-                const cleanSlug = (opp.title || "opportunity")
-                  .toLowerCase()
-                  .replace(/[^a-z0-9]+/g, "-")
-                  .replace(/^-+|-+$/g, "");
-                const localDetailUrl = `${window.location.origin}/opportunity/${opp.id}/${cleanSlug}`;
-                
-                return (
-                  <div key={idx} className="clean-card p-6 flex flex-col hover:shadow-lg transition-shadow relative group">
-                     <div className="absolute top-6 right-6 flex items-center gap-2">
-                       <button 
-                         onClick={() => {
-                           setShareOpp({ title: opp.title, link: localDetailUrl });
-                           trackInteraction(opp.id, 'save');
-                         }}
-                         className="text-gray-300 hover:text-blue-600 transition-colors"
-                         title="Share"
-                       >
-                         <Share2 className="w-5 h-5" />
-                       </button>
-                       <button 
-                         onClick={() => trackInteraction(opp.id, 'save')}
-                         className="text-gray-300 hover:text-blue-600 transition-colors" title="Bookmark"
-                       >
-                         <Bookmark className="w-5 h-5" />
-                       </button>
-                     </div>
-                     
-                     <div className="flex gap-4 mb-4">
-                       <div className="w-12 h-12 rounded bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center text-blue-800 font-bold text-lg shrink-0 border border-blue-200">
-                         {opp.org ? opp.org.substring(0,2).toUpperCase() : (opp.organization ? opp.organization.substring(0,2).toUpperCase() : 'OP')}
-                       </div>
-                       <div className="flex-1 pr-8">
-                         <a 
-                           href={`/opportunity/${opp.id}/${cleanSlug}`}
-                           onClick={(e) => {
-                             e.preventDefault();
-                             trackInteraction(opp.id, 'view');
-                             if (onViewDetails) onViewDetails(opp.id, opp.title);
-                           }}
-                           className="hover:text-blue-600 transition-colors block cursor-pointer"
-                         >
-                           <h3 className="text-lg font-bold text-gray-900 leading-tight mb-1 hover:text-blue-600 transition-colors">{opp.title}</h3>
-                         </a>
-                         <p className="text-sm font-medium text-gray-600">{opp.org || opp.organization}</p>
-                       </div>
-                     </div>
+         ) : searchData?.results?.length ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-[16px]">
+               {searchData.results.map((opp: any, i: number) => {
+                  const cleanSlug = (opp.title || "opportunity").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+                  
+                  return (
+                     <div key={i} className="bg-white border border-[#E2E8F0] rounded-[12px] flex flex-col hover:shadow-[0_4px_16px_rgba(0,0,0,0.06)] hover:-translate-y-[3px] transition-all duration-200 overflow-hidden cursor-pointer" onClick={() => onViewDetails && onViewDetails(opp.id, opp.title)}>
+                        {/* Thumb */}
+                        <div className={`h-[130px] p-4 relative flex items-center justify-center ${getThumbStyle(opp.type)}`}>
+                           <div className="absolute top-3 left-3 flex items-center gap-[6px]">
+                              {opp.type && <span className={`px-[9px] py-[3px] rounded-[100px] text-[10px] uppercase font-[700] ${getBadgeStyle(opp.type)}`}>{opp.type}</span>}
+                              {opp.verified !== false && <span className="px-[9px] py-[3px] rounded-[100px] text-[10px] uppercase font-[700] bg-green-100 text-green-700">LIVE</span>}
+                           </div>
+                           {(opp.type || '').toLowerCase().includes('hackathon') && <span className="opacity-80 font-black tracking-widest text-lg">HACKATHON</span>}
+                        </div>
 
-                     <p className="text-sm text-gray-700 line-clamp-2 mb-4 flex-1">{opp.description}</p>
-                     
-                     {(opp.match_reason || opp.matchReason) && (
-                       <div className="bg-blue-50/50 rounded-lg p-3 inline-flex items-start gap-2 mb-4 border border-blue-100">
-                         <span className="text-blue-600 shrink-0 mt-0.5">✓</span>
-                         <p className="text-xs font-medium text-blue-800">{opp.match_reason || opp.matchReason}</p>
-                       </div>
-                     )}
+                        {/* Content */}
+                        <div className="p-4 flex flex-col flex-1">
+                           <div className="flex items-center gap-2 mb-2">
+                              <div className="w-[22px] h-[22px] rounded-[5px] bg-[#EFF6FF] flex items-center justify-center font-bold text-[10px] text-[#2563EB]">
+                                 {opp.org ? opp.org.substring(0,2).toUpperCase() : 'CO'}
+                              </div>
+                              <span className="text-[12px] font-[500] text-[#64748B] truncate">{opp.org || opp.organization || 'Company'}</span>
+                           </div>
+                           
+                           <h3 className="text-[14px] font-[600] text-gray-900 mb-4 line-clamp-2 leading-snug">{opp.title}</h3>
 
-                     <div className="flex flex-wrap gap-2 mb-5">
-                        {opp.type && (
-                          <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs font-semibold rounded">
-                            {opp.type}
-                          </span>
-                        )}
-                        {opp.tags && opp.tags.slice(0,3).map((t: string) => (
-                          <span key={t} className="px-2 py-1 bg-gray-50 border border-gray-200 text-gray-600 text-xs font-medium rounded">
-                            {t}
-                          </span>
-                        ))}
-                        {(opp.trending || opp.status === 'HOT') && (
-                          <span className="px-2 py-1 bg-orange-50 text-orange-600 text-xs font-bold rounded">🔥 Trending</span>
-                        )}
-                        {(opp.closing_soon || opp.closingSoon) && (
-                          <span className="px-2 py-1 bg-red-50 text-red-600 text-xs font-bold rounded">⚡ Closing Soon</span>
-                        )}
-                        {opp.verified === false && (
-                          <span className="px-2 py-1 bg-yellow-50 text-yellow-700 text-xs font-bold rounded">⚠️ Unverified</span>
-                        )}
-                     </div>
+                           <div className="grid grid-cols-2 gap-4 mb-4">
+                              <div>
+                                 <div className="text-[10px] uppercase tracking-[0.08em] text-[#64748B] mb-0.5">Registered</div>
+                                 <div className="text-[14px] font-[600] text-gray-900">{(opp.id || '').substring(0,2).replace(/[^0-9]/g, '') + '50+'}</div>
+                              </div>
+                              <div>
+                                 <div className="text-[10px] uppercase tracking-[0.08em] text-[#64748B] mb-0.5">Ends In</div>
+                                 <div className="text-[14px] font-[600] text-gray-900">{(opp.deadline || '5 days').substring(0, 8)}</div>
+                              </div>
+                           </div>
 
-                     <div className="flex items-center justify-between pt-4 border-t border-gray-100 mt-auto gap-3">
-                       <div className={`flex items-center gap-1.5 text-xs sm:text-sm font-medium ${getDeadlineColor(opp.deadline)}`}>
-                         <Clock className="w-4 h-4" /> {opp.deadline || 'Deadline Unknown'}
-                       </div>
-                       <div className="flex items-center gap-2">
-                         <button 
-                           onClick={() => handleApplyAssist(opp)}
-                           className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors shadow-sm"
-                         >
-                           <FileText className="w-3.5 h-3.5" /> Apply Assist
-                         </button>
-                         {(opp.apply_link || opp.applyLink) && (
-                           <a 
-                             href={opp.apply_link || opp.applyLink} 
-                             target="_blank" 
-                             rel="noopener noreferrer" 
-                             onClick={() => trackInteraction(opp.id, 'apply')}
-                             className="clean-btn px-4 py-1.5 text-xs font-bold hover:shadow-md transition-shadow"
-                           >
-                             Apply Now
-                           </a>
-                         )}
-                       </div>
+                           <div className="mt-auto pt-4 border-t border-[#F1F5F9] flex items-center justify-between">
+                              <div className="text-[12px] text-[#64748B] flex items-center gap-1">
+                                 👥 <span>1-4 Members</span>
+                              </div>
+                              <div className="text-[13px] font-[600] text-[#2563EB]">
+                                 Register Now →
+                              </div>
+                           </div>
+                        </div>
                      </div>
-                  </div>
-                );
-              })}
+                  )
+               })}
             </div>
-          </div>
-        )}
-      </div>
+         ) : (
+            <div className="py-20 text-center">
+               <p className="text-gray-500">No opportunities found matching your filters.</p>
+            </div>
+         )}
 
-      <ShareModal 
-        isOpen={!!shareOpp} 
-        onClose={() => setShareOpp(null)} 
-        opportunity={shareOpp} 
-      />
+         {/* Pagination */}
+         {!loading && searchData?.results?.length > 0 && (
+            <div className="flex items-center justify-center gap-[6px] mt-10">
+               <button className="w-[36px] h-[36px] rounded-[8px] bg-white border border-[#E2E8F0] flex items-center justify-center text-[#64748B] hover:border-[#2563EB] hover:text-[#2563EB] transition-colors">‹</button>
+               <button className="w-[36px] h-[36px] rounded-[8px] bg-[#2563EB] text-white font-medium flex items-center justify-center">1</button>
+               <button className="w-[36px] h-[36px] rounded-[8px] bg-white border border-[#E2E8F0] flex items-center justify-center text-gray-700 hover:border-[#2563EB] hover:text-[#2563EB] transition-colors">2</button>
+               <button className="w-[36px] h-[36px] rounded-[8px] bg-white border border-[#E2E8F0] flex items-center justify-center text-[#64748B]">...</button>
+               <button className="w-[36px] h-[36px] rounded-[8px] bg-white border border-[#E2E8F0] flex items-center justify-center text-[#64748B] hover:border-[#2563EB] hover:text-[#2563EB] transition-colors">›</button>
+            </div>
+         )}
+      </main>
 
-      <ApplyAssistModal
-        isOpen={isAssistModalOpen}
-        onClose={() => setIsAssistModalOpen(false)}
-        content={assistContent}
-        isLoading={assistLoading}
-        opportunityTitle={assistingOpp?.title || "Opportunity"}
-      />
     </div>
   );
 }

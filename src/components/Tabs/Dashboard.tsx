@@ -147,101 +147,100 @@ export default function Dashboard({ user, profile, onViewDetails }: DashboardPro
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 relative">
-      <header>
-        <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+    <div className="max-w-[1200px] mx-auto space-y-10 pb-12 font-sans px-4 md:px-0">
+      <header className="pt-2">
+        <h2 className="text-[28px] font-[800] tracking-tight text-gray-900 mb-2">
           Dashboard
         </h2>
-        <p className="text-gray-500 mt-1">Here is your intelligence briefing.</p>
+        <p className="text-[15px] text-[#64748B]">Here is your personalized intelligence briefing.</p>
       </header>
 
       {/* Stats Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard title="Opportunities Matched" value={feedItems.length > 0 ? feedItems.length : "0"} icon={Target} />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-[20px]">
+        <MetricCard title="Matched Opportunities" value={feedItems.length > 0 ? feedItems.length : "0"} icon={Target} />
         <MetricCard title="Applications Tracked" value="0" icon={Compass} />
         <MetricCard title="Mentor Sessions" value="0" icon={Search} />
         <MetricCard title="Profile Strength" value={`${profileStrength()}%`} icon={ShieldCheck} highlight />
       </div>
 
       {/* Scout Protocol Banner */}
-      <div className="bg-blue-50 border border-blue-100 rounded-xl p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+      <div className="bg-gradient-to-br from-[#EFF6FF] to-[#DBEAFE] border border-[#BFDBFE] rounded-[20px] p-8 md:p-10 flex flex-col md:flex-row items-center justify-between gap-8 shadow-[0_4px_24px_rgba(37,99,235,0.06)]">
         <div>
-          <h3 className="text-2xl font-bold text-blue-900 mb-2">Scout Protocol</h3>
-          <p className="text-blue-700 max-w-xl">Find your best matches in 60 seconds. Our AI will calibrate your feed based on your specific requirements and background.</p>
-          <div className="flex items-center gap-4 mt-6 text-sm font-medium text-blue-800">
-            <span className="flex items-center gap-1"><span className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs">1</span> Year</span>
-            <ArrowRight className="w-3 h-3 text-blue-300" />
-            <span className="flex items-center gap-1"><span className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs">2</span> Field</span>
-            <ArrowRight className="w-3 h-3 text-blue-300" />
-            <span className="flex items-center gap-1"><span className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs">3</span> Tech</span>
-            <ArrowRight className="w-3 h-3 text-blue-300" />
-            <span className="flex items-center gap-1"><span className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs">4</span> Goal</span>
+          <div className="inline-block px-3 py-1 bg-[#2563EB] text-white text-[11px] font-[800] uppercase tracking-wide rounded-full mb-4">
+            New Feature
+          </div>
+          <h3 className="text-[24px] font-[800] text-gray-900 mb-3">Scout Protocol</h3>
+          <p className="text-[15px] text-[#475569] max-w-xl leading-relaxed">Find your best matches in seconds. Our AI will calibrate your feed based on your specific requirements and background, updating in real-time.</p>
+          <div className="flex flex-wrap items-center gap-3 mt-6 text-[13px] font-[600] text-[#1D4ED8]">
+            <span className="flex items-center gap-[6px]"><span className="w-6 h-6 rounded-full bg-white flex items-center justify-center text-[11px] font-bold shadow-sm">1</span> Year</span>
+            <ArrowRight className="w-3.5 h-3.5 text-[#93C5FD]" />
+            <span className="flex items-center gap-[6px]"><span className="w-6 h-6 rounded-full bg-white flex items-center justify-center text-[11px] font-bold shadow-sm">2</span> Field</span>
+            <ArrowRight className="w-3.5 h-3.5 text-[#93C5FD]" />
+            <span className="flex items-center gap-[6px]"><span className="w-6 h-6 rounded-full bg-white flex items-center justify-center text-[11px] font-bold shadow-sm">3</span> Tech</span>
+            <ArrowRight className="w-3.5 h-3.5 text-[#93C5FD]" />
+            <span className="flex items-center gap-[6px]"><span className="w-6 h-6 rounded-full bg-white flex items-center justify-center text-[11px] font-bold shadow-sm">4</span> Goal</span>
           </div>
         </div>
-        <button onClick={() => setShowScoutModal(true)} className="clean-btn px-8 py-3 whitespace-nowrap shadow-md hover:shadow-lg">
-          Run Scout Protocol
+        <button onClick={() => setShowScoutModal(true)} className="bg-[#2563EB] hover:bg-blue-700 text-white font-[700] px-8 py-3.5 rounded-[12px] whitespace-nowrap shadow-[0_4px_16px_rgba(37,99,235,0.25)] transition-all transform hover:-translate-y-1">
+          Run Protocol Now
         </button>
       </div>
 
       {/* Feed Preview */}
-      <div className="space-y-4 pt-6 text-gray-900 border-t border-gray-100">
+      <div className="space-y-6 pt-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h3 className="text-xl font-bold">Personalized Feed</h3>
+            <h3 className="text-[20px] font-[800] text-gray-900 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-[#F59E0B]" /> Personalized Feed
+            </h3>
             {lastUpdated && !loading && (
-              <p className="text-[10px] font-medium text-gray-400 mt-0.5">
-                Last checked: {new Date(lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              <p className="text-[12px] font-[500] text-[#64748B] mt-1.5 flex items-center gap-1.5">
+                <RefreshCw className="w-3 h-3" /> Last checked: {new Date(lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </p>
             )}
           </div>
           
-          <div className="flex items-center gap-4">
-            {/* Discovery Mode Toggle */}
-            <div className="flex items-center bg-gray-100 p-1 rounded-full relative">
-              <div 
-                className={`absolute inset-y-1 w-[120px] rounded-full bg-white shadow-sm transition-all duration-300 ease-out`}
-                style={{ left: discoveryMode === 'smart' ? '4px' : 'calc(100% - 124px)' }}
-              />
-              <button
-                onClick={() => setDiscoveryMode('smart')}
-                className={`relative w-[120px] z-10 flex items-center justify-center gap-2 py-1.5 px-3 rounded-full text-xs font-bold transition-colors ${discoveryMode === 'smart' ? 'text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                Smart Match
-              </button>
-              <button
-                onClick={() => setDiscoveryMode('explore')}
-                className={`relative w-[120px] z-10 flex items-center justify-center gap-2 py-1.5 px-3 rounded-full text-xs font-bold transition-colors ${discoveryMode === 'explore' ? 'text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}
-              >
-                <Compass className="w-3.5 h-3.5" />
-                Explore
-              </button>
-            </div>
-
+          <div className="flex items-center gap-4 bg-white p-1 rounded-full shadow-sm border border-[#E2E8F0] relative">
+            <div 
+              className={`absolute inset-y-1 w-[120px] rounded-full bg-[#F1F5F9] transition-all duration-300 ease-out`}
+              style={{ left: discoveryMode === 'smart' ? '4px' : 'calc(100% - 124px)' }}
+            />
+            <button
+              onClick={() => setDiscoveryMode('smart')}
+              className={`relative w-[120px] z-10 flex items-center justify-center gap-2 py-2 px-3 rounded-full text-[12px] font-[700] uppercase tracking-wide transition-colors ${discoveryMode === 'smart' ? 'text-[#0F172A]' : 'text-[#64748B] hover:text-[#0F172A]'}`}
+            >
+              Smart Match
+            </button>
+            <button
+              onClick={() => setDiscoveryMode('explore')}
+              className={`relative w-[120px] z-10 flex items-center justify-center gap-2 py-2 px-3 rounded-full text-[12px] font-[700] uppercase tracking-wide transition-colors ${discoveryMode === 'explore' ? 'text-[#0F172A]' : 'text-[#64748B] hover:text-[#0F172A]'}`}
+            >
+              Explore
+            </button>
+            
             <button 
               onClick={() => loadInitialFeed(true)}
               disabled={loading}
-              className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50 font-medium"
+              className="ml-2 mr-1 w-8 h-8 rounded-full bg-white border border-[#E2E8F0] shadow-sm flex items-center justify-center text-[#2563EB] disabled:opacity-50 hover:bg-[#F8FAFC]"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
             </button>
           </div>
         </div>
         
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-12 clean-card">
-            <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-4" />
-            <p className="text-gray-500 font-medium text-sm">Discovering more opportunities for you 🚀</p>
+          <div className="flex flex-col items-center justify-center py-20 bg-white rounded-[16px] border border-[#E2E8F0]">
+            <div className="w-10 h-10 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin mb-4"></div>
+            <p className="text-[#64748B] font-[500] text-[14px]">Discovering more opportunities for you 🚀</p>
           </div>
         ) : (feedItems.length > 0 || newLiveItems.length > 0) ? (
           <div className="space-y-8 relative">
 
             {/* Fallback Banner */}
             {feedItems.some(i => i.isFallback) && (
-              <div className="bg-blue-50/40 text-blue-800 p-4 rounded-lg flex items-center gap-3 border border-blue-100/50 backdrop-blur-sm">
-                <Sparkles className="w-5 h-5 shrink-0 text-blue-500" />
-                <p className="text-sm font-medium">Showing curated opportunities while we refresh new matches ✨</p>
+              <div className="bg-[#FFFBEB] border border-[#FEF3C7] px-5 py-4 rounded-[12px] flex items-center gap-3">
+                <Sparkles className="w-5 h-5 shrink-0 text-[#D97706]" />
+                <p className="text-[14px] text-[#92400E] font-[500]">Showing curated opportunities while we refresh new matches ✨</p>
               </div>
             )}
 
@@ -255,119 +254,130 @@ export default function Dashboard({ user, profile, onViewDetails }: DashboardPro
                     setHasNewUpdates(false);
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg rounded-full px-6 py-2.5 text-sm font-bold flex items-center gap-2 transition-transform hover:scale-105"
+                  className="bg-[#2563EB] hover:bg-blue-700 text-white shadow-lg rounded-full px-6 py-2.5 text-[13px] font-[700] flex items-center gap-2 transition-transform hover:scale-105"
                 >
-                  ↑ {newLiveItems.length} New {newLiveItems.length === 1 ? 'Opportunity' : 'Opportunities'}
+                  ↑ {newLiveItems.length} New Update{newLiveItems.length !== 1 && 's'}
                 </button>
               </div>
             )}
 
-            {([
-              { title: "Personalized Feed", icon: <Sparkles className="w-5 h-5 text-amber-500" />, items: feedItems },
-            ]).map(group => group.items.length > 0 && (
-              <div key={group.title} className="space-y-4">
-                <h4 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                  {group.icon}
-                  {group.title}
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {group.items.map((item, i) => (
-                    <div key={i} className="clean-card p-6 flex flex-col justify-between relative group">
-                      <button 
-                        onClick={() => {
-                          setShareOpp({ title: item.title, link: item.applyLink || item.apply_link || window.location.href });
-                          trackInteraction(item.id, 'save');
-                        }}
-                        className="absolute top-4 right-4 text-gray-400 hover:text-blue-600 transition-colors"
-                        title="Share"
-                      >
-                        <Share2 className="w-4 h-4" />
-                      </button>
-                      <div>
-                        <div className="flex justify-between items-start mb-2 pr-6">
-                          <span className="text-xs font-semibold px-2 py-1 bg-blue-50 text-blue-700 rounded-md">
-                            {item.type || 'Opportunity'}
-                          </span>
-                          <div className="flex gap-2 items-center">
-                            {item.isLive && <span className="text-[10px] uppercase font-bold text-white bg-red-500 px-2 py-0.5 rounded-full animate-pulse">Live</span>}
-                            {(item.matchScore || item.match_score || item.smartMatch || item.smart_match) && <span className="text-xs font-semibold text-green-600">⚡ {item.matchScore || item.match_score ? (item.matchScore || item.match_score) + '% Match' : 'Smart Match'}</span>}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-[20px]">
+               {feedItems.map((item, i) => {
+                 const tType = (item.type || '').toLowerCase();
+                 let badgeClass = "bg-[#EFF6FF] text-[#2563EB]";
+                 if (tType.includes("hackathon")) badgeClass = "bg-[#F3E8FF] text-[#7E22CE]";
+                 if (tType.includes("job")) badgeClass = "bg-[#ECFDF5] text-[#059669]";
+                 if (tType.includes("scholarship")) badgeClass = "bg-[#FFF7ED] text-[#C2410C]";
+
+                 return (
+                    <div key={i} className="bg-white border border-[#E2E8F0] p-6 rounded-[16px] flex flex-col relative hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:-translate-y-[2px] transition-all duration-300">
+                       <button 
+                         onClick={() => {
+                           setShareOpp({ title: item.title, link: item.applyLink || item.apply_link || window.location.href });
+                           trackInteraction(item.id, 'save');
+                         }}
+                         className="absolute top-6 right-6 text-[#94A3B8] hover:text-[#2563EB] transition-colors"
+                       >
+                         <Share2 className="w-[18px] h-[18px]" />
+                       </button>
+
+                       <div className="flex gap-[16px] mb-5">
+                          <div className="w-[48px] h-[48px] rounded-[10px] bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-center font-[700] text-[18px] text-[#475569] shrink-0">
+                             {item.org ? item.org.substring(0,1).toUpperCase() : (item.organization ? item.organization.substring(0,1).toUpperCase() : 'C')}
                           </div>
-                        </div>
-                        <a 
-                          href={`/opportunity/${item.id}/${(item.title || "opportunity").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            trackInteraction(item.id, 'view');
-                            if (onViewDetails) onViewDetails(item.id, item.title);
-                          }}
-                          className="hover:text-blue-600 transition-colors block cursor-pointer"
-                        >
-                          <h4 className="font-bold text-gray-900 mb-1 hover:text-blue-600 transition-colors leading-tight text-base sm:text-lg">{item.title}</h4>
-                        </a>
-                        <p className="text-sm text-gray-500 mb-3">{item.organization || item.org}</p>
-                        <p className="text-sm text-gray-700 line-clamp-2 mb-4">{item.description}</p>
-                        {(item.matchReason || item.match_reason) && <p className="text-xs text-gray-500 bg-gray-50 p-2 rounded mb-4">✓ {item.matchReason || item.match_reason}</p>}
-                      </div>
-                      <div className="flex items-center justify-between border-t border-gray-100 pt-4 mt-auto">
-                         <div className="flex flex-wrap gap-2">
-                           {item.tags?.slice(0,2).map((t: string) => (
-                             <span key={t} className="text-[10px] bg-gray-100 px-2 py-1 text-gray-600 rounded">{t}</span>
-                           ))}
-                         </div>
-                         <div className="flex items-center gap-2">
-                           <button 
-                             onClick={() => handleApplyAssist(item)}
-                             className="flex items-center gap-1.5 px-2 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors shadow-sm"
-                           >
-                             <FileText className="w-3.5 h-3.5 hidden sm:block" /> Assist
-                           </button>
-                           {(item.apply_link || item.applyLink) ? (
-                             <a 
-                               href={item.apply_link || item.applyLink} 
-                               target="_blank" 
-                               rel="noopener noreferrer" 
-                               onClick={() => trackInteraction(item.id, 'apply')}
-                               className="clean-btn px-4 py-1.5 text-xs font-bold hover:shadow-md transition-shadow"
-                             >
-                               Apply
-                             </a>
-                           ) : (
-                             <span className="text-[10px] font-semibold text-red-500">DL: {item.deadline || item.daysLeft + 'd'}</span>
-                           )}
-                         </div>
-                      </div>
+                          <div className="pr-10">
+                            <div className="flex items-center gap-[8px] mb-1.5 flex-wrap">
+                               <span className={`px-[8px] py-[3px] rounded-[6px] text-[10px] font-[800] uppercase tracking-wide ${badgeClass}`}>
+                                 {item.type || 'Opportunity'}
+                               </span>
+                               {item.isLive && <span className="text-[10px] uppercase font-[800] text-white bg-[#EF4444] px-[8px] py-[3px] rounded-[6px] animate-pulse">Live</span>}
+                               {(item.matchScore || item.match_score || item.smartMatch || item.smart_match) && <span className="text-[10px] font-[800] uppercase tracking-wide text-[#059669] bg-[#ECFDF5] px-[8px] py-[3px] rounded-[6px]">⚡ {item.matchScore || item.match_score ? (item.matchScore || item.match_score) + '% Match' : 'Smart Match'}</span>}
+                            </div>
+                            <a 
+                              href={`/opportunity/${item.id}/${(item.title || "opportunity").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                trackInteraction(item.id, 'view');
+                                if (onViewDetails) onViewDetails(item.id, item.title);
+                              }}
+                              className="block group"
+                            >
+                              <h4 className="font-[700] text-[16px] md:text-[18px] leading-[1.3] text-[#0F172A] group-hover:text-[#2563EB] transition-colors mb-1.5">{item.title}</h4>
+                            </a>
+                            <p className="text-[14px] text-[#64748B] font-[500]">{item.organization || item.org}</p>
+                          </div>
+                       </div>
+
+                       <p className="text-[14px] text-[#475569] line-clamp-2 leading-relaxed mb-4">{item.description}</p>
+                       
+                       {(item.matchReason || item.match_reason) && (
+                          <div className="bg-[#F8FAFC] border border-[#E2E8F0] p-3 rounded-[8px] mb-5 flex items-start gap-2">
+                             <Sparkles className="w-4 h-4 text-[#2563EB] shrink-0 mt-0.5" />
+                             <p className="text-[13px] text-[#475569]">{item.matchReason || item.match_reason}</p>
+                          </div>
+                       )}
+
+                       <div className="mt-auto pt-5 border-t border-[#F1F5F9] flex flex-wrap items-center justify-between gap-4">
+                          <div className="flex flex-wrap gap-[6px]">
+                            {item.tags?.slice(0,2).map((t: string) => (
+                              <span key={t} className="text-[11px] font-[600] text-[#64748B] bg-[#F1F5F9] px-[10px] py-[4px] rounded-[100px]">{t}</span>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-[10px]">
+                            <button 
+                              onClick={() => handleApplyAssist(item)}
+                              className="flex items-center gap-1.5 px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] text-[#475569] hover:bg-[#F1F5F9] rounded-[8px] text-[13px] font-[600] transition-colors"
+                            >
+                              <FileText className="w-[14px] h-[14px]" /> <span>Assist</span>
+                            </button>
+                            {(item.apply_link || item.applyLink) ? (
+                              <a 
+                                href={item.apply_link || item.applyLink} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                onClick={() => trackInteraction(item.id, 'apply')}
+                                className="bg-[#2563EB] text-white px-4 py-2 rounded-[8px] text-[13px] font-[700] hover:bg-blue-700 transition-colors shadow-sm"
+                              >
+                                Apply Now
+                              </a>
+                            ) : (
+                              <div className="bg-[#FFF7ED] border border-[#FFEDD5] text-[#C2410C] px-3 py-2 rounded-[8px] text-[12px] font-[600]">
+                                {item.deadline || item.daysLeft + ' Days Left'}
+                              </div>
+                            )}
+                          </div>
+                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+                 )
+               })}
+            </div>
             
-            <div className="flex justify-center pt-4">
+            <div className="flex justify-center pt-8">
               <button 
                 onClick={handleLoadMore}
                 disabled={loadingMore || !hasNextPage}
-                className="clean-btn-outline px-8 py-3 flex items-center gap-2 shadow-sm hover:shadow-md transition-shadow disabled:opacity-50"
+                className="bg-white border-[1.5px] border-[#E2E8F0] text-[#0F172A] px-8 py-3 rounded-[12px] text-[14px] font-[700] flex items-center gap-2 hover:bg-[#F8FAFC] transition-colors disabled:opacity-50"
               >
                 {loadingMore ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Finding more...
-                  </>
+                  <><div className="w-4 h-4 border-2 border-[#0F172A] border-t-transparent rounded-full animate-spin"></div> Loading...</>
                 ) : !hasNextPage ? (
-                  <>No more opportunities</>
+                  <>You're all caught up!</>
                 ) : (
-                  <>
-                    <Sparkles className="w-4 h-4" />
-                    Load More Opportunities
-                  </>
+                  <>Load More Results</>
                 )}
               </button>
             </div>
           </div>
         ) : (
-          <div className="clean-card p-12 text-center border-dashed border-gray-200">
-            <Target className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">Run the Scout Protocol to populate your feed.</p>
+          <div className="bg-white border border-[#E2E8F0] rounded-[16px] py-20 px-6 text-center shadow-sm">
+            <div className="w-16 h-16 bg-[#F8FAFC] rounded-full flex items-center justify-center mx-auto mb-4 border border-[#E2E8F0]">
+               <Target className="w-8 h-8 text-[#94A3B8]" />
+            </div>
+            <h3 className="text-[18px] font-[700] text-gray-900 mb-2">No matches exactly fit this yet.</h3>
+            <p className="text-[14px] text-[#64748B] max-w-md mx-auto mb-6">Run the Scout Protocol to force our system to aggressively match your profile against our entire database.</p>
+            <button onClick={() => setShowScoutModal(true)} className="bg-[#0F172A] text-white px-6 py-2.5 rounded-[8px] text-[14px] font-[700] hover:bg-gray-800 transition-colors">
+               Launch Scout Protocol
+            </button>
           </div>
         )}
       </div>
@@ -388,16 +398,25 @@ export default function Dashboard({ user, profile, onViewDetails }: DashboardPro
 
       {/* Scout Modal */}
       {showScoutModal && (
-        <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl overflow-hidden">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-               <div>
-                 <h3 className="text-xl font-bold text-gray-900">Scout Protocol</h3>
-                 <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mt-1">Step {scoutStep} of 4</p>
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[24px] w-full max-w-2xl shadow-2xl overflow-hidden animate-fade-in">
+            <div className="px-8 py-6 border-b border-[#E2E8F0] flex justify-between items-center bg-white">
+               <div className="flex items-center gap-3">
+                 <div className="w-10 h-10 rounded-[10px] bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center">
+                    <Sparkles className="w-5 h-5" />
+                 </div>
+                 <div>
+                   <h3 className="text-[18px] font-[800] text-gray-900">Scout Protocol</h3>
+                   <div className="flex items-center gap-2 mt-0.5">
+                      <div className="h-1.5 w-16 bg-[#F1F5F9] rounded-full overflow-hidden">
+                         <div className="h-full bg-[#2563EB] rounded-full transition-all duration-500" style={{ width: `${(scoutStep / 4) * 100}%` }}></div>
+                      </div>
+                      <p className="text-[11px] text-[#64748B] font-[700] uppercase tracking-wider">Step {scoutStep} of 4</p>
+                   </div>
+                 </div>
                </div>
-               <button onClick={() => setShowScoutModal(false)} className="text-gray-400 hover:text-gray-600">
-                 <Loader2 className="w-5 h-5 hidden" /> {/* Placeholder */}
-                 Close
+               <button onClick={() => setShowScoutModal(false)} className="w-[36px] h-[36px] rounded-full bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-center text-[#64748B] hover:text-[#0F172A] transition-colors">
+                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                </button>
             </div>
             
@@ -410,30 +429,33 @@ export default function Dashboard({ user, profile, onViewDetails }: DashboardPro
                 />
               )}
               {scoutStep === 2 && (
-                <ScoutStep title="Field of study?" 
+                <ScoutStep title="What is your field of study?" 
                   options={['Engineering', 'Science', 'Commerce', 'Arts', 'Law', 'Medicine', 'Design', 'Other']}
                   selected={scoutData.field}
                   onSelect={(v: string) => { setScoutData({...scoutData, field: v}); setScoutStep(3); }}
+                  showBack={() => setScoutStep(1)}
                 />
               )}
               {scoutStep === 3 && (
-                <div className="space-y-4">
-                  <h4 className="text-lg font-bold text-gray-900">Technology Focus?</h4>
-                  <p className="text-sm text-gray-500 mb-4">Enter your primary technical interests separated by commas.</p>
-                  <input type="text" placeholder="e.g. AI/ML, Web Dev, Finance..." 
-                    className="clean-input w-full p-3"
-                    value={scoutData.tech}
-                    onChange={e => setScoutData({...scoutData, tech: e.target.value})}
-                    onKeyDown={e => { if (e.key === 'Enter') setScoutStep(4) }}
-                  />
-                  <div className="pt-4 flex justify-end gap-3">
-                    <button onClick={() => setScoutStep(2)} className="clean-btn-outline px-4 py-2">Back</button>
-                    <button onClick={() => setScoutStep(4)} className="clean-btn px-6 py-2">Next</button>
+                <div className="space-y-6 animate-fade-in">
+                  <div>
+                     <h4 className="text-[20px] font-[800] text-gray-900 mb-2">Technology Focus?</h4>
+                     <p className="text-[14px] text-[#64748B] mb-6">Enter your primary technical interests separated by commas.</p>
+                     <input type="text" placeholder="e.g. AI/ML, Web Dev, Finance..." 
+                       className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-[12px] px-4 py-3.5 text-[15px] text-gray-900 outline-none focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] transition-all"
+                       value={scoutData.tech}
+                       onChange={e => setScoutData({...scoutData, tech: e.target.value})}
+                       onKeyDown={e => { if (e.key === 'Enter') setScoutStep(4) }}
+                     />
+                  </div>
+                  <div className="pt-6 flex justify-between items-center">
+                    <button onClick={() => setScoutStep(2)} className="text-[14px] font-[600] text-[#64748B] hover:text-[#0F172A] transition-colors">← Back</button>
+                    <button onClick={() => setScoutStep(4)} className="bg-[#0F172A] text-white px-6 py-2.5 rounded-[8px] text-[14px] font-[700] hover:bg-gray-800 transition-colors">Next Step →</button>
                   </div>
                 </div>
               )}
               {scoutStep === 4 && (
-                <ScoutStep title="Immediate goal?" 
+                <ScoutStep title="What is your immediate goal?" 
                   options={['Internship', 'Hackathon', 'Scholarship', 'Mentorship', 'Job', 'Fellowship']}
                   selected={scoutData.goal}
                   onSelect={(v: string) => { 
@@ -454,34 +476,36 @@ export default function Dashboard({ user, profile, onViewDetails }: DashboardPro
 
 function MetricCard({ title, value, icon: Icon, highlight = false }: any) {
   return (
-    <div className={`clean-card p-6 ${highlight ? 'border-blue-200 bg-blue-50/50' : ''}`}>
-      <div className="flex justify-between items-start mb-2">
-        <p className="text-sm font-medium text-gray-500 truncate pr-4">{title}</p>
-        <Icon className={`w-5 h-5 shrink-0 ${highlight ? 'text-blue-600' : 'text-gray-400'}`} />
+    <div className={`bg-white border rounded-[16px] p-6 shadow-sm hover:shadow-[0_4px_24px_rgba(0,0,0,0.04)] transition-all ${highlight ? 'border-[#BFDBFE] bg-gradient-to-br from-[#EFF6FF] to-white' : 'border-[#E2E8F0]'}`}>
+      <div className="flex justify-between items-start mb-3">
+        <p className="text-[13px] font-[600] text-[#64748B] uppercase tracking-[0.05em] pr-4">{title}</p>
+        <div className={`w-8 h-8 rounded-[8px] flex items-center justify-center shrink-0 ${highlight ? 'bg-[#DBEAFE] text-[#2563EB]' : 'bg-[#F1F5F9] text-[#94A3B8]'}`}>
+           <Icon className="w-4 h-4" />
+        </div>
       </div>
-      <h3 className="text-3xl font-bold text-gray-900">{value}</h3>
+      <h3 className={`text-[32px] font-[800] tracking-tight ${highlight ? 'text-[#1D4ED8]' : 'text-gray-900'}`}>{value}</h3>
     </div>
   );
 }
 
 function ScoutStep({ title, options, selected, onSelect, showBack }: any) {
   return (
-    <div className="space-y-6">
-      <h4 className="text-lg font-bold text-gray-900">{title}</h4>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+    <div className="space-y-6 animate-fade-in">
+      <h4 className="text-[20px] font-[800] text-gray-900 mb-6">{title}</h4>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-[12px]">
         {options.map((opt: string) => (
           <button 
             key={opt}
             onClick={() => onSelect(opt)}
-            className={`px-4 py-3 text-sm font-medium rounded-lg border transition-all text-center ${selected === opt ? 'bg-blue-50 text-blue-700 border-blue-600' : 'bg-white text-gray-700 border-gray-200 hover:border-blue-300 hover:bg-gray-50'}`}
+            className={`px-4 py-4 text-[14px] font-[600] rounded-[12px] border-[1.5px] transition-all text-center ${selected === opt ? 'bg-[#EFF6FF] text-[#2563EB] border-[#2563EB] shadow-[0_0_0_2px_rgba(37,99,235,0.1)]' : 'bg-white text-[#475569] border-[#E2E8F0] hover:border-[#CBD5E1] hover:bg-[#F8FAFC]'}`}
           >
             {opt}
           </button>
         ))}
       </div>
       {showBack && (
-        <div className="pt-4 flex justify-start">
-          <button onClick={showBack} className="text-sm font-medium text-gray-500 hover:text-gray-900">← Back</button>
+        <div className="pt-6 flex justify-start">
+          <button onClick={showBack} className="text-[14px] font-[600] text-[#64748B] hover:text-[#0F172A] transition-colors">← Back</button>
         </div>
       )}
     </div>

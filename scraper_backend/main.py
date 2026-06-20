@@ -12,6 +12,7 @@ from scraper_engine.sources.hackathons.devpost import DevpostScraper
 from scraper_engine.sources.hackathons.unstop import UnstopScraper
 from scraper_engine.sources.events.eventbrite import EventbriteScraper
 from scraper_engine.sources.scholarships.opportunities_circle import OpportunitiesCircleScraper
+from scraper_engine.sources.internships.internshala import InternshalaScraper
 from scraper_engine.core.ingestor import Ingestor
 from registry.scraper_registry import registry
 
@@ -41,6 +42,7 @@ async def run_pipeline():
     registry.register(UnstopScraper(), "https://unstop.com/api/public/opportunity/search-result")
     registry.register(EventbriteScraper(), "https://www.eventbrite.com/api/v3/events/search/")
     registry.register(OpportunitiesCircleScraper(), "https://opportunitiescircle.com/wp-json/wp/v2/posts")
+    registry.register(InternshalaScraper(), "https://internshala.com/internships/")
     
     # 2. Execute all registered scrapers concurrently
     results = await registry.execute_all(lambda res, src: ingestor_callback(res, src, ingestor))
@@ -77,7 +79,8 @@ async def run_pipeline():
             "devfolio": 100,
             "unstop": 90,
             "eventbrite": 80,
-            "opportunities_circle": 75
+            "opportunities_circle": 75,
+            "internshala": 85
         }
         source_yield_quality = quality_scores.get(source_id, 70)
 

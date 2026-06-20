@@ -68,14 +68,29 @@ def clean_tags_with_ai(title: str, raw_tags: list) -> list:
                 # Clean and normalize strings
                 cleaned = [str(t).strip() for t in tags if t]
                 return cleaned[:4]
-    except urllib.error.HTTPError as he:
-        if he.code == 429:
+    except (urllib.error.HTTPError, Exception) as error:
+        is_503 = getattr(error, 'code', None) == 503
+        is_429 = getattr(error, 'code', None) == 429
+        is_timeout = "timed out" in str(error).lower() or "timeout" in str(error).lower()
+        if is_503 or is_timeout or is_429:
+            logger.info(f"Gemini 3.5-flash error (503/429/timeout), retrying with gemini-3.1-flash-lite...")
+            url_lite = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key={api_key}"
+            try:
+                req_lite = urllib.request.Request(url_lite, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+                with urllib.request.urlopen(req_lite, timeout=8) as response_lite:
+                    res_data = json.loads(response_lite.read().decode("utf-8"))
+                    text = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    tags = json.loads(text)
+                    if isinstance(tags, list):
+                        cleaned = [str(t).strip() for t in tags if t]
+                        return cleaned[:4]
+            except Exception as lite_ex:
+                logger.warning(f"AI Tag Cleanup exception (lite): {lite_ex}. Falling back to standard normalizer.")
+        elif getattr(error, 'code', None) == 429:
             # Hit rate limit despite cooldown, backoff for 30 seconds
             _rate_limit_until = time.time() + 30.0
         else:
-            logger.warning(f"AI Tag Cleanup failed: {he}. Falling back to standard normalizer.")
-    except Exception as ex:
-        logger.warning(f"AI Tag Cleanup exception: {ex}. Falling back to standard normalizer.")
+            logger.warning(f"AI Tag Cleanup exception: {error}. Falling back to standard normalizer.")
         
     # Return standard clean list fallback
     fallback = [t for t in raw_tags if len(t) > 1 and len(t) < 20]

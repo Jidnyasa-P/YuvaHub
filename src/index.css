@@ -10,6 +10,17 @@
   --color-bg-light: #f9fafb;
   
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  
+  --animate-float: float 3s ease-in-out infinite;
+
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0) rotate(0deg);
+    }
+    50% {
+      transform: translateY(-10px) rotate(2deg);
+    }
+  }
 }
 
 @utility no-scrollbar {
