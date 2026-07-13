@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Calendar, MapPin, Share2, FileText, ChevronRight, Clock, ExternalLink, Zap, CheckCircle, Award, Bookmark } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, FileText, ChevronRight, Clock, ExternalLink, Zap, CheckCircle, Award, Bookmark } from 'lucide-react';
 import { SEO } from '../SEO';
 import { fetchOpportunityById, trackInteraction, generateApplyAssistBackend } from '../../services/apiClient';
 import ShareModal from '../ui/ShareModal';
 import ApplyAssistModal from '../ui/ApplyAssistModal';
 import { doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import ShareCalendarActions from '../ui/ShareCalendarActions';
 import { ErrorState, LoadingState } from '../ui/states';
 
 interface OpportunityDetailProps {
@@ -190,12 +191,25 @@ export default function OpportunityDetail({ id, onBack, profile, setProfile }: O
           >
             <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} /> {isBookmarked ? 'Saved' : 'Save'}
           </button>
-          <button 
-            onClick={() => setShareOpp({ title: opp.title, link: detailUrl })}
-            className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 py-1.5 px-3 rounded-md transition-colors border border-gray-200"
-          >
-            <Share2 className="w-4 h-4" /> Share URL
-          </button>
+          <ShareCalendarActions
+  title={opp.title}
+  url={detailUrl}
+  description={
+    opp.description ||
+    'View this opportunity on YuvaHub.'
+  }
+  location={
+    opp.location ||
+    'Remote / Online'
+  }
+  deadline={opp.deadline}
+  onOpenFallback={() =>
+    setShareOpp({
+      title: opp.title,
+      link: detailUrl,
+    })
+  }
+/>
         </div>
       </div>
 
