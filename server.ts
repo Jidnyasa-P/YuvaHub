@@ -8,8 +8,85 @@ import { fileURLToPath } from "url";
 import { MongoClient, ObjectId } from "mongodb";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
+import rateLimit from "express-rate-limit";
+import { RedisStore } from "rate-limit-redis";
+import Redis from "ioredis";
 
 dotenv.config();
+
+let redisClient: Redis;
+try {
+  redisClient = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    retryStrategy: (times) => {
+      return Math.min(times * 50, 2000);
+    }
+  });
+
+  redisClient.on('error', (err) => {
+    console.error('[Redis] Connection error:', err.message);
+  });
+  redisClient.on('connect', () => {
+    console.log('[Redis] Connected successfully');
+  });
+} catch (e: any) {
+  console.error('[Redis] Init error:', e.message);
+}
+
+const createFailOpenStore = (prefix: string) => {
+  const store = new RedisStore({
+    sendCommand: (...args: string[]) => redisClient.call(...args),
+    prefix: prefix,
+  });
+
+  return {
+    ...store,
+    increment: async (key: string) => {
+      if (!redisClient || redisClient.status !== 'ready') {
+        console.error(`[RateLimit] Redis disconnected. Failing open for key: ${key}`);
+        return { totalHits: 1, resetTime: new Date(Date.now() + 60000) };
+      }
+      try {
+        return await store.increment(key);
+      } catch (err: any) {
+        console.error(`[RateLimit] Redis error. Failing open for key: ${key}`);
+        return { totalHits: 1, resetTime: new Date(Date.now() + 60000) };
+      }
+    },
+    decrement: async (key: string) => {
+      if (!redisClient || redisClient.status !== 'ready') return;
+      try { return await store.decrement(key); } catch(e) {}
+    },
+    resetKey: async (key: string) => {
+      if (!redisClient || redisClient.status !== 'ready') return;
+      try { return await store.resetKey(key); } catch(e) {}
+    },
+  };
+};
+
+const resumeRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: true,
+  validate: false,
+  store: createFailOpenStore('rate-limit:ai-resume:'),
+  message: { error: "Too many resume review requests. Please try again later." }
+});
+
+const chatRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: true,
+  validate: false,
+  store: createFailOpenStore('rate-limit:ai-chat:'),
+  keyGenerator: (req) => {
+    return req.body?.userId || req.ip || "unknown";
+  },
+  message: { error: "Too many AI generation requests. Please try again after a minute." }
+});
 
 let _genAI: GoogleGenAI | null = null;
 function getGenAI() {
@@ -777,7 +854,7 @@ Sincerely,
     return "I am here to help you navigate academic choices, resume reviews, track development milestones, and match with elite engineering fellowships!";
   }
 
-  app.post("/api/v1/ai/generate", async (req, res) => {
+  app.post("/api/v1/ai/generate", chatRateLimiter, async (req, res) => {
     try {
       const { prompt, expectJson } = req.body;
       if (!prompt) return res.status(400).json({ error: "No prompt" });
@@ -838,7 +915,7 @@ Sincerely,
     }
   });
 
-  app.post("/api/v1/ai/resume_review", async (req, res) => {
+  app.post("/api/v1/ai/resume_review", resumeRateLimiter, async (req, res) => {
     try {
       const { resume } = req.body;
       if (!resume) return res.status(400).json({ error: "No resume provided" });
