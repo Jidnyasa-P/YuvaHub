@@ -43,7 +43,7 @@ export default function Opportunities({
     setError(null);
     try {
       const typeStr = filters.type.Internships ? 'Internship' : (filters.type.Hackathons ? 'Hackathon' : 'All');
-      const results = await searchOpportunities(q || "Student opportunities", typeStr, 1, {});
+      const results = await searchOpportunities(q || "Student opportunities", typeStr, undefined, {});
       setSearchData(results);
     } catch {
       setError('Unable to load opportunities. Please try again.');

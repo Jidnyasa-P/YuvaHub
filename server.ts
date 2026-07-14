@@ -10,8 +10,85 @@ import dotenv from "dotenv";
 import { GoogleGenAI, Type } from "@google/genai";
 import { z } from "zod";
 import { ScholarshipSchema, AIEvaluationResponseSchema } from "./src/models/scholarshipSchema.js";
+import rateLimit from "express-rate-limit";
+import { RedisStore } from "rate-limit-redis";
+import Redis from "ioredis";
 
 dotenv.config();
+
+let redisClient: Redis;
+try {
+  redisClient = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    retryStrategy: (times) => {
+      return Math.min(times * 50, 2000);
+    }
+  });
+
+  redisClient.on('error', (err) => {
+    console.error('[Redis] Connection error:', err.message);
+  });
+  redisClient.on('connect', () => {
+    console.log('[Redis] Connected successfully');
+  });
+} catch (e: any) {
+  console.error('[Redis] Init error:', e.message);
+}
+
+const createFailOpenStore = (prefix: string) => {
+  const store = new RedisStore({
+    sendCommand: (...args: string[]) => redisClient.call(...args),
+    prefix: prefix,
+  });
+
+  return {
+    ...store,
+    increment: async (key: string) => {
+      if (!redisClient || redisClient.status !== 'ready') {
+        console.error(`[RateLimit] Redis disconnected. Failing open for key: ${key}`);
+        return { totalHits: 1, resetTime: new Date(Date.now() + 60000) };
+      }
+      try {
+        return await store.increment(key);
+      } catch (err: any) {
+        console.error(`[RateLimit] Redis error. Failing open for key: ${key}`);
+        return { totalHits: 1, resetTime: new Date(Date.now() + 60000) };
+      }
+    },
+    decrement: async (key: string) => {
+      if (!redisClient || redisClient.status !== 'ready') return;
+      try { return await store.decrement(key); } catch(e) {}
+    },
+    resetKey: async (key: string) => {
+      if (!redisClient || redisClient.status !== 'ready') return;
+      try { return await store.resetKey(key); } catch(e) {}
+    },
+  };
+};
+
+const resumeRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: true,
+  validate: false,
+  store: createFailOpenStore('rate-limit:ai-resume:'),
+  message: { error: "Too many resume review requests. Please try again later." }
+});
+
+const chatRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: true,
+  validate: false,
+  store: createFailOpenStore('rate-limit:ai-chat:'),
+  keyGenerator: (req) => {
+    return req.body?.userId || req.ip || "unknown";
+  },
+  message: { error: "Too many AI generation requests. Please try again after a minute." }
+});
 
 let _genAI: GoogleGenAI | null = null;
 function getGenAI() {
@@ -35,102 +112,306 @@ function getGenAI() {
 // Composite Feed Ranking Engine based on relevance, freshness, quality, and engagement clicks
 async function getRankedOpportunities(database: any, profile: any, page: number, limit: number) {
   try {
-    const cursor = database.collection("opportunities").find({}).sort({ created_at: -1 }).limit(150);
-    const opportunities = await cursor.toArray();
-    
-    if (opportunities.length === 0) {
-      return { items: [], next_page: null };
+    const skip = (page - 1) * limit;
+
+    // Retain mock DB logic as a fallback for offline development
+    if (database.isMock) {
+      const cursor = database.collection("opportunities").find({}).sort({ created_at: -1 }).limit(150);
+      const opportunities = await cursor.toArray();
+      
+      if (opportunities.length === 0) {
+        return { items: [], next_page: null };
+      }
+
+      const oIds = opportunities.map((o: any) => o._id ? o._id.toString() : o.id);
+      const interactions = database ? await database.collection("interactions").find({
+        opportunity_id: { $in: oIds }
+      }).toArray() : [];
+
+      const intMap: Record<string, { total: number, recent: number }> = {};
+      const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+
+      interactions.forEach((i: any) => {
+        const oId = i.opportunity_id;
+        if (!intMap[oId]) {
+          intMap[oId] = { total: 0, recent: 0 };
+        }
+        intMap[oId].total += 1;
+        const iTime = i.timestamp ? new Date(i.timestamp) : new Date();
+        if (iTime >= fortyEightHoursAgo) {
+          intMap[oId].recent += 1;
+        }
+      });
+
+      const now = Date.now();
+      const profileSkills = profile.skills ? profile.skills.toLowerCase().split(',') : [];
+      const profileCountry = profile.country ? profile.country.toLowerCase().trim() : "";
+      const profileField = profile.field ? profile.field.toLowerCase().trim() : "";
+
+      const scoredItems = opportunities.map((opp: any) => {
+        const idStr = opp._id ? opp._id.toString() : opp.id;
+        const stats = intMap[idStr] || { total: 0, recent: 0 };
+
+        const engagementScore = stats.total * 15;
+        const trendingScore = stats.recent * 30;
+        const sourceQualityScore = opp.source_quality_score || 70;
+
+        const createdTime = opp.created_at ? new Date(opp.created_at).getTime() : now;
+        const hoursSinceCreation = Math.max(0, (now - createdTime) / (1000 * 60 * 60));
+        const freshnessScore = (100 / (1 + (hoursSinceCreation * 0.15))) * 2.0;
+
+        let profileRelevanceScore = 0;
+        if (profileSkills.length > 0 && opp.tags) {
+          const oppTagsLower = opp.tags.map((t: string) => t.toLowerCase());
+          profileSkills.forEach((skill: string) => {
+            const trimmed = skill.trim();
+            if (trimmed && oppTagsLower.some((tag: string) => tag.includes(trimmed) || trimmed.includes(tag))) {
+              profileRelevanceScore += 50;
+            }
+          });
+        }
+
+        if (profileField && opp.description) {
+          if (opp.description.toLowerCase().includes(profileField) || opp.title.toLowerCase().includes(profileField)) {
+            profileRelevanceScore += 40;
+          }
+        }
+
+        if (profileCountry && opp.location) {
+          const locLower = opp.location.toLowerCase();
+          if (locLower.includes(profileCountry) || profileCountry.includes(locLower) || locLower.includes("online") || locLower.includes("remote")) {
+            profileRelevanceScore += 35;
+          }
+        }
+
+        const totalScore = engagementScore + trendingScore + sourceQualityScore + freshnessScore + profileRelevanceScore;
+
+        return {
+          ...opp,
+          id: idStr,
+          metrics: {
+            totalScore: Math.round(totalScore),
+            relevance: profileRelevanceScore,
+            freshness: Math.round(freshnessScore),
+            interactionRatio: stats.total
+          }
+        };
+      });
+
+      scoredItems.sort((a: any, b: any) => b.metrics.totalScore - a.metrics.totalScore);
+
+      const paginatedItems = scoredItems.slice(skip, skip + limit);
+      
+      const mapped = paginatedItems.map((opp: any) => {
+        const copy = { ...opp };
+        delete copy._id;
+        return copy;
+      });
+
+      return {
+        items: mapped,
+        next_page: skip + limit < scoredItems.length ? page + 1 : null
+      };
     }
 
-    const oIds = opportunities.map((o: any) => o._id ? o._id.toString() : o.id);
-    const interactions = database ? await database.collection("interactions").find({
-      opportunity_id: { $in: oIds }
-    }).toArray() : [];
-
-    const intMap: Record<string, { total: number, recent: number }> = {};
-    const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
-
-    interactions.forEach((i: any) => {
-      const oId = i.opportunity_id;
-      if (!intMap[oId]) {
-        intMap[oId] = { total: 0, recent: 0 };
-      }
-      intMap[oId].total += 1;
-      const iTime = i.timestamp ? new Date(i.timestamp) : new Date();
-      if (iTime >= fortyEightHoursAgo) {
-        intMap[oId].recent += 1;
-      }
-    });
-
-    const now = Date.now();
-    const profileSkills = profile.skills ? profile.skills.toLowerCase().split(',') : [];
+    // Native MongoDB Aggregation Pipeline
+    const profileSkills = profile.skills ? profile.skills.toLowerCase().split(',').map((s: string) => s.trim()).filter(Boolean) : [];
     const profileCountry = profile.country ? profile.country.toLowerCase().trim() : "";
     const profileField = profile.field ? profile.field.toLowerCase().trim() : "";
 
-    const scoredItems = opportunities.map((opp: any) => {
-      const idStr = opp._id ? opp._id.toString() : opp.id;
-      const stats = intMap[idStr] || { total: 0, recent: 0 };
+    const pipeline: any[] = [];
+    
+    // 1. Match phase (currently empty to scan collection)
+    pipeline.push({ $match: {} });
 
-      const engagementScore = stats.total * 15;
-      const trendingScore = stats.recent * 30;
-      const sourceQualityScore = opp.source_quality_score || 70;
-
-      const createdTime = opp.created_at ? new Date(opp.created_at).getTime() : now;
-      const hoursSinceCreation = Math.max(0, (now - createdTime) / (1000 * 60 * 60));
-      const freshnessScore = (100 / (1 + (hoursSinceCreation * 0.15))) * 2.0;
-
-      let profileRelevanceScore = 0;
-      if (profileSkills.length > 0 && opp.tags) {
-        const oppTagsLower = opp.tags.map((t: string) => t.toLowerCase());
-        profileSkills.forEach((skill: string) => {
-          const trimmed = skill.trim();
-          if (trimmed && oppTagsLower.some((tag: string) => tag.includes(trimmed) || trimmed.includes(tag))) {
-            profileRelevanceScore += 50;
+    // 2. Lookup interactions
+    pipeline.push({
+      $lookup: {
+        from: "interactions",
+        let: { oppIdStr: { $toString: "$_id" }, oppId: "$id" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $or: [
+                  { $eq: ["$opportunity_id", "$$oppIdStr"] },
+                  { $eq: ["$opportunity_id", "$$oppId"] }
+                ]
+              }
+            }
           }
-        });
+        ],
+        as: "interactions"
       }
-
-      if (profileField && opp.description) {
-        if (opp.description.toLowerCase().includes(profileField) || opp.title.toLowerCase().includes(profileField)) {
-          profileRelevanceScore += 40;
-        }
-      }
-
-      if (profileCountry && opp.location) {
-        const locLower = opp.location.toLowerCase();
-        if (locLower.includes(profileCountry) || profileCountry.includes(locLower) || locLower.includes("online") || locLower.includes("remote")) {
-          profileRelevanceScore += 35;
-        }
-      }
-
-      const totalScore = engagementScore + trendingScore + sourceQualityScore + freshnessScore + profileRelevanceScore;
-
-      return {
-        ...opp,
-        id: idStr,
-        metrics: {
-          totalScore: Math.round(totalScore),
-          relevance: profileRelevanceScore,
-          freshness: Math.round(freshnessScore),
-          interactionRatio: stats.total
-        }
-      };
     });
 
-    scoredItems.sort((a: any, b: any) => b.metrics.totalScore - a.metrics.totalScore);
+    // 3. Stats Calculation
+    const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    pipeline.push({
+      $addFields: {
+        "stats.total": { $size: "$interactions" },
+        "stats.recent": {
+          $size: {
+            $filter: {
+              input: "$interactions",
+              as: "i",
+              cond: { $gte: [{ $toDate: "$$i.timestamp" }, fortyEightHoursAgo] }
+            }
+          }
+        }
+      }
+    });
 
-    const skip = (page - 1) * limit;
-    const paginatedItems = scoredItems.slice(skip, skip + limit);
-    
-    const mapped = paginatedItems.map((opp: any) => {
+    // Clear interactions array to save pipeline memory
+    pipeline.push({ $unset: "interactions" });
+
+    // 4. Build Profile Relevance Logic
+    const relevanceAdditions: any[] = [0]; // default 0 to ensure $add is valid
+
+    if (profileSkills.length > 0) {
+      profileSkills.forEach((skill: string) => {
+        relevanceAdditions.push({
+          $cond: {
+            if: {
+              $and: [
+                { $isArray: "$tags" },
+                { $gt: [{ $size: "$tags" }, 0] },
+                {
+                  $anyElementTrue: {
+                    $map: {
+                      input: "$tags",
+                      as: "tag",
+                      in: { $regexMatch: { input: { $toLower: "$$tag" }, regex: skill } }
+                    }
+                  }
+                }
+              ]
+            },
+            then: 50,
+            else: 0
+          }
+        });
+      });
+    }
+
+    if (profileField) {
+      relevanceAdditions.push({
+        $cond: {
+          if: {
+            $or: [
+              { $regexMatch: { input: { $toLower: { $ifNull: ["$description", ""] } }, regex: profileField } },
+              { $regexMatch: { input: { $toLower: { $ifNull: ["$title", ""] } }, regex: profileField } }
+            ]
+          },
+          then: 40,
+          else: 0
+        }
+      });
+    }
+
+    if (profileCountry) {
+      const cRegex = `${profileCountry}|online|remote`;
+      relevanceAdditions.push({
+        $cond: {
+          if: { $regexMatch: { input: { $toLower: { $ifNull: ["$location", ""] } }, regex: cRegex } },
+          then: 35,
+          else: 0
+        }
+      });
+    }
+
+    // 5. Score Calculation
+    pipeline.push({
+      $addFields: {
+        profileRelevanceScore: { $add: relevanceAdditions },
+        engagementScore: { $multiply: ["$stats.total", 15] },
+        trendingScore: { $multiply: ["$stats.recent", 30] },
+        sourceQualityScore: { $ifNull: ["$source_quality_score", 70] },
+        hoursSinceCreation: {
+          $max: [
+            0,
+            {
+              $divide: [
+                { $dateDiff: { startDate: { $ifNull: [{ $toDate: "$created_at" }, "$$NOW"] }, endDate: "$$NOW", unit: "millisecond" } },
+                1000 * 60 * 60
+              ]
+            }
+          ]
+        }
+      }
+    });
+
+    pipeline.push({
+      $addFields: {
+        freshnessScore: {
+          $multiply: [
+            {
+              $divide: [
+                100,
+                { $add: [1, { $multiply: ["$hoursSinceCreation", 0.15] }] }
+              ]
+            },
+            2.0
+          ]
+        }
+      }
+    });
+
+    pipeline.push({
+      $addFields: {
+        totalScore: {
+          $add: [
+            "$engagementScore",
+            "$trendingScore",
+            "$sourceQualityScore",
+            "$freshnessScore",
+            "$profileRelevanceScore"
+          ]
+        }
+      }
+    });
+
+    pipeline.push({
+      $addFields: {
+        id: { $toString: "$_id" },
+        "metrics.totalScore": { $round: "$totalScore" },
+        "metrics.relevance": "$profileRelevanceScore",
+        "metrics.freshness": { $round: "$freshnessScore" },
+        "metrics.interactionRatio": "$stats.total"
+      }
+    });
+
+    // 6. Sort, Skip, Limit
+    pipeline.push({ $sort: { totalScore: -1 } });
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: limit + 1 });
+
+    const cursor = database.collection("opportunities").aggregate(pipeline);
+    let items = await cursor.toArray();
+
+    let next_page = null;
+    if (items.length > limit) {
+      next_page = page + 1;
+      items = items.slice(0, limit);
+    }
+
+    const mapped = items.map((opp: any) => {
       const copy = { ...opp };
       delete copy._id;
+      delete copy.stats;
+      delete copy.engagementScore;
+      delete copy.trendingScore;
+      delete copy.sourceQualityScore;
+      delete copy.hoursSinceCreation;
+      delete copy.freshnessScore;
+      delete copy.profileRelevanceScore;
+      delete copy.totalScore;
       return copy;
     });
 
     return {
       items: mapped,
-      next_page: skip + limit < scoredItems.length ? page + 1 : null
+      next_page
     };
   } catch (scoreErr) {
     console.error("Scoring failure:", scoreErr);
@@ -192,6 +473,7 @@ class MemoryCollection {
 }
 
 class MockDB {
+  isMock = true;
   collections: Record<string, MemoryCollection> = {
     opportunities: new MemoryCollection(CURATED_FALLBACKS.map(f => ({...f, created_at: new Date()}))),
     interactions: new MemoryCollection(),
@@ -205,6 +487,11 @@ if (uri) {
   client.connect().then(() => {
     db = client.db(dbName);
     console.log(`[Database] Connected to MongoDB: ${dbName}`);
+    
+    // Create required compound indexes asynchronously
+    db.collection("opportunities").createIndex({ created_at: -1, source_quality_score: -1 })
+      .then(() => console.log(`[Database] Created compound index on opportunities`))
+      .catch((err: any) => console.error(`[Database] Failed to create index:`, err));
   }).catch(err => {
     console.error("[Database] Connection failed, falling back to Mock Data:", err);
     db = new MockDB();
@@ -222,7 +509,7 @@ async function startServer() {
   const corsOptions = frontendUrl ? { origin: frontendUrl } : { origin: "*" };
   
   const io = new Server(server, { cors: corsOptions });
-  const PORT = 3000;
+  const PORT = 5173;
 
   // Trust reverse proxy (Cloud Run, nginx / Cloudflare reverse proxies)
   app.set('trust proxy', true);
@@ -354,11 +641,15 @@ async function startServer() {
   // --- Real API Routes ---
   app.get("/api/v1/opportunities", async (req, res) => {
     try {
-      const page = parseInt((req.query.page as string) || "1", 10);
+      let page = parseInt((req.query.page as string) || "1", 10);
+      if (req.query.cursor) {
+        const cInt = parseInt(req.query.cursor as string, 10);
+        if (!isNaN(cInt) && cInt > 0) page = cInt;
+      }
       const limit = parseInt((req.query.limit as string) || "10", 10);
       
       if (!db) {
-        return res.json({ num_results: 1, next_page: null, items: [{
+        return res.json({ num_results: 1, next_page: null, next_cursor: null, items: [{
           id: "sys_nodeDbMissing", title: "Awaiting Live Ingestion...", organization: "Yuvahub System", type: "status", tags: ["system"], apply_link: "#"
         }]});
       }
@@ -374,6 +665,7 @@ async function startServer() {
       res.json({
         num_results: result.items.length,
         next_page: result.next_page,
+        next_cursor: result.next_page ? String(result.next_page) : null,
         items: result.items
       });
     } catch(err) {
@@ -385,7 +677,7 @@ async function startServer() {
   app.get("/api/v1/opportunities/trending", async (req, res) => {
     try {
       if (!db) {
-        return res.json({ num_results: 0, next_page: null, items: [] });
+        return res.json({ num_results: 0, next_page: null, next_cursor: null, items: [] });
       }
 
       // Fetch top composites with empty profile to return globally engaging/trending items
@@ -394,6 +686,7 @@ async function startServer() {
       res.json({
         num_results: result.items.length,
         next_page: null,
+        next_cursor: null,
         items: result.items
       });
     } catch(err) {
@@ -569,7 +862,7 @@ Sincerely,
     return "I am here to help you navigate academic choices, resume reviews, track development milestones, and match with elite engineering fellowships!";
   }
 
-  app.post("/api/v1/ai/generate", async (req, res) => {
+  app.post("/api/v1/ai/generate", chatRateLimiter, async (req, res) => {
     try {
       const { prompt, expectJson } = req.body;
       if (!prompt) return res.status(400).json({ error: "No prompt" });
@@ -630,7 +923,7 @@ Sincerely,
     }
   });
 
-  app.post("/api/v1/ai/resume_review", async (req, res) => {
+  app.post("/api/v1/ai/resume_review", resumeRateLimiter, async (req, res) => {
     try {
       const { resume } = req.body;
       if (!resume) return res.status(400).json({ error: "No resume provided" });
@@ -1514,6 +1807,17 @@ ${JSON.stringify(userProfile, null, 2)}
 
   server.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    
+    // Auto-open browser in development mode
+    if (process.env.NODE_ENV !== "production") {
+      import("child_process").then(({ exec }) => {
+        const url = `http://localhost:${PORT}`;
+        const cmd = process.platform === 'win32' ? `start ${url}` 
+                  : process.platform === 'darwin' ? `open ${url}` 
+                  : `xdg-open ${url}`;
+        exec(cmd);
+      });
+    }
   });
 }
 

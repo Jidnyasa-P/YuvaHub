@@ -134,11 +134,11 @@ export async function fetchLatestFeed() {
   }
 }
 
-export async function fetchSmartFeed(profile: any, page: number = 1) {
+export async function fetchSmartFeed(profile: any, cursor?: string) {
   const cacheKey = "smart_feed";
   try {
     const searchParams = new URLSearchParams();
-    searchParams.append('page', page.toString());
+    if (cursor) searchParams.append('cursor', cursor);
     
     if (profile?.domain) searchParams.append('domain', profile.domain);
     if (profile?.skills) {
@@ -164,7 +164,7 @@ export async function fetchSmartFeed(profile: any, page: number = 1) {
       console.log("DB returned sparse results or missing database, triggering Gemini supplemental discovery...");
       let geminiSuccess = false;
       try {
-        const geminiItems = await geminiService.generateSmartFeed(profile, page);
+        const geminiItems = await geminiService.generateSmartFeed(profile, 1);
         if (geminiItems && geminiItems.length > 0) {
           // Filter out missing DB placeholder first
           const cleanDbItems = (data.items || []).filter((item: any) => item.id !== "sys_nodeDbMissing");
@@ -173,7 +173,7 @@ export async function fetchSmartFeed(profile: any, page: number = 1) {
             ...geminiItems.map((item: any) => ({ ...item, isAI_Supplement: true }))
           ];
           data.meta = { ...data.meta, note: "Supplemented with AI-discovered opportunities" };
-          data.next_page = page + 1; // force next page if we injected items
+          // For AI supplements, we can't easily cursor paginate, so we just return no cursor
           geminiSuccess = true;
         }
       } catch (geminiError) {
@@ -188,11 +188,10 @@ export async function fetchSmartFeed(profile: any, page: number = 1) {
           ...cleanDbItems,
           ...staticItems.map((item: any) => ({ ...item, isFallback: true }))
         ];
-        data.next_page = page + 1;
       }
     }
 
-    if (page === 1 && data.items && data.items.length > 0) {
+    if (!cursor && data.items && data.items.length > 0) {
         saveToCache(cacheKey, data);
     }
     return data;
@@ -202,12 +201,11 @@ export async function fetchSmartFeed(profile: any, page: number = 1) {
     if (cached) return { ...cached, isFallback: true };
     
     try {
-        const geminiItems = await geminiService.generateSmartFeed(profile, page);
+        const geminiItems = await geminiService.generateSmartFeed(profile, 1);
         if (geminiItems && geminiItems.length > 0) {
           return { 
              items: geminiItems.map((i: any) => ({...i, isAI_Supplement: true})), 
-             isFallback: true, 
-             next_page: page + 1 
+             isFallback: true
           };
         }
     } catch (e) {
@@ -216,8 +214,7 @@ export async function fetchSmartFeed(profile: any, page: number = 1) {
 
     return { 
        items: getFilteredFallbacks(profile, 6).map((item: any) => ({ ...item, isFallback: true })), 
-       isFallback: true,
-       next_page: page + 1
+       isFallback: true
     };
   }
 }
@@ -281,10 +278,14 @@ export async function chatWithAIMentorBackend(messages: any[], newMessage: strin
   }
 }
 
-export async function fetchExploreFeed(page: number = 1, limit: number = 20) {
+export async function fetchExploreFeed(cursor?: string, limit: number = 20) {
   const cacheKey = "explore_feed";
   try {
-    const url = `${API_BASE_URL}/opportunities/trending?page=${page}&limit=${limit}`;
+    const searchParams = new URLSearchParams();
+    if (cursor) searchParams.append('cursor', cursor);
+    searchParams.append('limit', limit.toString());
+    
+    const url = `${API_BASE_URL}/opportunities/trending?${searchParams.toString()}`;
     const response = await fetchWithRetry(url, {
       method: "GET",
       headers: { "Content-Type": "application/json" }
@@ -300,13 +301,12 @@ export async function fetchExploreFeed(page: number = 1, limit: number = 20) {
       console.log("DB returned sparse explore results, triggering Gemini supplemental discovery...");
       let geminiSuccess = false;
       try {
-        const geminiItems = await geminiService.generateExploreFeed(page);
+        const geminiItems = await geminiService.generateExploreFeed(1);
         if (geminiItems && geminiItems.length > 0) {
           data.items = [
             ...(data.items || []).filter((item: any) => item.id !== "sys_nodeDbMissing"),
             ...geminiItems.map((item: any) => ({ ...item, isAI_Supplement: true }))
           ];
-          data.next_page = page + 1;
           geminiSuccess = true;
         }
       } catch (e) {
@@ -319,23 +319,21 @@ export async function fetchExploreFeed(page: number = 1, limit: number = 20) {
           ...(data.items || []).filter((item: any) => item.id !== "sys_nodeDbMissing"),
           ...staticItems.map((item: any) => ({ ...item, isFallback: true }))
         ];
-        data.next_page = page + 1;
       }
     }
 
-    if (page === 1 && data.items && data.items.length > 0) saveToCache(cacheKey, data);
+    if (!cursor && data.items && data.items.length > 0) saveToCache(cacheKey, data);
     return data;
   } catch (error) {
     const cached = getFromCache(cacheKey);
     if (cached) return { ...cached, isFallback: true };
     
     try {
-        const geminiItems = await geminiService.generateExploreFeed(page);
+        const geminiItems = await geminiService.generateExploreFeed(1);
         if (geminiItems && geminiItems.length > 0) {
           return { 
              items: geminiItems.map((i: any) => ({...i, isAI_Supplement: true})), 
-             isFallback: true, 
-             next_page: page + 1 
+             isFallback: true
           };
         }
     } catch (e) {
@@ -344,13 +342,12 @@ export async function fetchExploreFeed(page: number = 1, limit: number = 20) {
 
     return { 
        items: getFilteredFallbacks({}, 6).map((item: any) => ({ ...item, isFallback: true })), 
-       isFallback: true,
-       next_page: page + 1
+       isFallback: true
     };
   }
 }
 
-export async function searchOpportunities(query: string, type?: string, page: number = 1, advanced?: {remote?: boolean, location?: string, days?: number, company?: string}) {
+export async function searchOpportunities(query: string, type?: string, cursor?: string, advanced?: {remote?: boolean, location?: string, days?: number, company?: string}) {
   const cacheKey = `search_${query.toLowerCase().replace(/\s+/g, '_')}`;
   try {
     const searchParams = new URLSearchParams();
@@ -361,7 +358,7 @@ export async function searchOpportunities(query: string, type?: string, page: nu
     if (advanced?.days) searchParams.append('days', advanced.days.toString());
     if (advanced?.company) searchParams.append('q', advanced.company + ' ' + query); // hacky company filter
     
-    searchParams.append('page', page.toString());
+    if (cursor) searchParams.append('cursor', cursor);
     
     const url = `${API_BASE_URL}/search?${searchParams.toString()}`;
 

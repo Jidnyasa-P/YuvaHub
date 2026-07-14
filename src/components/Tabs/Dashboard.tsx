@@ -21,7 +21,7 @@ export default function Dashboard({ user, profile, onViewDetails }: DashboardPro
   const [loadingMore, setLoadingMore] = useState(false);
   const [feedError, setFeedError] = useState<string | null>(null);
   const [feedItems, setFeedItems] = useState<any[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasNextPage, setHasNextPage] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [shareOpp, setShareOpp] = useState<{title: string, link: string} | null>(null);
@@ -70,15 +70,15 @@ export default function Dashboard({ user, profile, onViewDetails }: DashboardPro
     try {
       setFeedError(null);
       const fetchFn = mode === 'smart' 
-        ? () => fetchSmartFeed(profile, 1) 
+        ? () => fetchSmartFeed(profile) 
         : mode === 'daily'
         ? () => fetchLatestFeed()
-        : () => fetchExploreFeed(1);
+        : () => fetchExploreFeed();
       const results = await fetchFn();
       
       setFeedItems(results.items || []);
-      setCurrentPage(1);
-      setHasNextPage(!!results.next_page);
+      setNextCursor(results.next_cursor || null);
+      setHasNextPage(!!results.next_cursor);
       setLastUpdated(Date.now());
     } catch {
       setFeedError('Unable to load your dashboard feed. Please try again.');
@@ -91,15 +91,14 @@ export default function Dashboard({ user, profile, onViewDetails }: DashboardPro
     if (loadingMore || !hasNextPage || discoveryMode === 'daily') return;
     setLoadingMore(true);
     try {
-      const nextPage = currentPage + 1;
       const results = discoveryMode === 'smart' 
-        ? await fetchSmartFeed(profile, nextPage) 
-        : await fetchExploreFeed(nextPage);
+        ? await fetchSmartFeed(profile, nextCursor || undefined) 
+        : await fetchExploreFeed(nextCursor || undefined);
       
       if (results.items?.length > 0) {
         setFeedItems(prev => [...prev, ...results.items]);
-        setCurrentPage(nextPage);
-        setHasNextPage(!!results.next_page);
+        setNextCursor(results.next_cursor || null);
+        setHasNextPage(!!results.next_cursor);
       } else {
         setHasNextPage(false);
       }

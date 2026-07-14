@@ -27,10 +27,10 @@ export default function SplashAuth() {
         </div>
         
         <nav className="hidden md:flex items-center gap-8 text-[14px] font-medium text-gray-700">
-          <a href="#" className="hover:text-[#2563EB] transition-colors">Learn</a>
-          <a href="#" className="hover:text-[#2563EB] transition-colors">Compete</a>
-          <a href="#" className="hover:text-[#2563EB] transition-colors">Jobs</a>
-          <a href="#" className="hover:text-[#2563EB] transition-colors">Mentorship</a>
+          <a href="#explore" onClick={(e) => { e.preventDefault(); document.getElementById('explore')?.scrollIntoView({ behavior: 'smooth' }); }} className="hover:text-[#2563EB] transition-colors cursor-pointer">Learn</a>
+          <a href="#competitions" onClick={(e) => { e.preventDefault(); document.getElementById('competitions')?.scrollIntoView({ behavior: 'smooth' }); }} className="hover:text-[#2563EB] transition-colors cursor-pointer">Compete</a>
+          <a href="#stats" onClick={(e) => { e.preventDefault(); document.getElementById('stats')?.scrollIntoView({ behavior: 'smooth' }); }} className="hover:text-[#2563EB] transition-colors cursor-pointer">Jobs</a>
+          <a href="#footer" onClick={(e) => { e.preventDefault(); document.getElementById('footer')?.scrollIntoView({ behavior: 'smooth' }); }} className="hover:text-[#2563EB] transition-colors cursor-pointer">Mentorship</a>
         </nav>
         
         <div className="flex items-center gap-4">
@@ -96,7 +96,7 @@ export default function SplashAuth() {
       </section>
 
       {/* Explore Your Interest */}
-      <section className="bg-[#F8FAFC] py-20 px-6 lg:px-12">
+      <section id="explore" className="bg-[#F8FAFC] py-20 px-6 lg:px-12">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-[28px] font-[700] text-gray-900 mb-3">Explore Your Interest</h2>
@@ -123,7 +123,7 @@ export default function SplashAuth() {
       </section>
 
       {/* Featured Competitions */}
-      <section className="py-20 px-6 lg:px-12 max-w-7xl mx-auto">
+      <section id="competitions" className="py-20 px-6 lg:px-12 max-w-7xl mx-auto">
          <div className="flex items-center justify-between mb-10">
             <h2 className="text-[28px] font-[700] text-gray-900">Featured Competitions</h2>
             <a href="#" onClick={handleLogin} className="text-[#2563EB] font-bold text-[14px] hover:underline flex items-center gap-1">View All <ArrowRight className="w-4 h-4" /></a>
@@ -190,7 +190,7 @@ export default function SplashAuth() {
       </section>
 
       {/* Stats Bar */}
-      <section className="bg-[#1D4ED8] py-[52px] px-6">
+      <section id="stats" className="bg-[#1D4ED8] py-[52px] px-6">
          <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-center gap-10 md:gap-[80px] text-center">
             <div>
                <div className="text-[40px] font-[800] text-white">5M+</div>
@@ -215,7 +215,7 @@ export default function SplashAuth() {
       </section>
 
       {/* Footer */}
-      <footer className="bg-white pt-20 pb-8 px-6 lg:px-12 max-w-7xl mx-auto">
+      <footer id="footer" className="bg-white pt-20 pb-8 px-6 lg:px-12 max-w-7xl mx-auto">
          <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_2fr] gap-10 mb-16">
             <div className="max-w-[220px]">
                <div className="flex items-center gap-2 mb-4">
