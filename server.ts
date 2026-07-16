@@ -437,6 +437,10 @@ const uri = process.env.MONGODB_URI || "";
 const dbName = process.env.MONGODB_DB_NAME || "yuvahub";
 import { CURATED_FALLBACKS } from "./src/services/staticFallbacks.js";
 import fs from "fs";
+import { initializeDNLDatabase } from "./src/services/dnl/metrics.js";
+import { DNLDispatcher } from "./src/services/dnl/scheduler.js";
+import { DevpostAdapter } from "./src/services/dnl/adapters/DevpostAdapter.js";
+import { InternshalaAdapter } from "./src/services/dnl/adapters/InternshalaAdapter.js";
 
 let db: any = null;
 
@@ -491,11 +495,24 @@ class MockDB {
   collection(name: string) { return this.collections[name] || (this.collections[name] = new MemoryCollection()); }
 }
 
+function setupDNL(database: any) {
+  initializeDNLDatabase(database).then(() => {
+    const dispatcher = new DNLDispatcher(database);
+    dispatcher.registerAdapter(new DevpostAdapter());
+    dispatcher.registerAdapter(new InternshalaAdapter());
+    dispatcher.start(3600000); // 1 hour
+    console.log("[DNL] Scheduler initialized and started.");
+  }).catch(err => {
+    console.error("[DNL] Setup failed:", err);
+  });
+}
+
 if (uri) {
   const client = new MongoClient(uri);
   client.connect().then(() => {
     db = client.db(dbName);
     console.log(`[Database] Connected to MongoDB: ${dbName}`);
+    setupDNL(db);
     
     // Create required compound indexes asynchronously
     db.collection("opportunities").createIndex({ created_at: -1, source_quality_score: -1 })
@@ -504,10 +521,12 @@ if (uri) {
   }).catch(err => {
     console.error("[Database] Connection failed, falling back to Mock Data:", err);
     db = new MockDB();
+    setupDNL(db);
   });
 } else {
   console.log("[Database] No MONGODB_URI provided. Running in Offline Mock mode.");
   db = new MockDB();
+  setupDNL(db);
 }
 
 async function startServer() {
@@ -1555,14 +1574,25 @@ Return JSON strictly in this format:
       };
 
       if (metrics.length > 0) {
-        const adminScrapers = metrics.map((m: any) => ({
+        const latestMetricsMap = new Map<string, any>();
+        metrics.forEach((m: any) => {
+          const id = m.id || m.name?.toLowerCase().replace(/[^a-z0-9]/g, '_');
+          if (id) {
+            const existing = latestMetricsMap.get(id);
+            if (!existing || new Date(m.lastRun) > new Date(existing.lastRun)) {
+              latestMetricsMap.set(id, m);
+            }
+          }
+        });
+
+        const adminScrapers = Array.from(latestMetricsMap.values()).map((m: any) => ({
           name: m.name || mappings[m.id] || m.id,
           status: m.status || "healthy",
           lastRun: m.lastRun ? new Date(m.lastRun).toLocaleString() : "Recently",
-          items: m.items || 0,
+          items: m.payloads_processed || m.items || 0,
           failures: m.failures || 0,
           proxyHealth: m.proxyHealth || "green",
-          duplicate_percentage: m.duplicate_percentage ?? 12.5,
+          duplicate_percentage: m.payloads_processed > 0 ? parseFloat(((m.duplicates / m.payloads_processed) * 100).toFixed(1)) : (m.duplicate_percentage ?? 12.5),
           yield_quality: m.yield_quality ?? 85,
           ops_per_hour: m.ops_per_hour ?? 30
         }));

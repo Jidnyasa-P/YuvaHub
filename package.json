@@ -12,7 +12,8 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "scrape": "tsx scrape-cli.ts",
-    "test-mongo": "tsx test-mongo.ts"
+    "test-mongo": "tsx test-mongo.ts",
+    "test-dnl": "tsx src/services/dnl/validationTest.ts"
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",
