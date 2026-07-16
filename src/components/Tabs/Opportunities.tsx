@@ -262,7 +262,7 @@ export default function Opportunities() {
              <p className="text-[14px] text-[#64748B]">Browse and filter the complete live database.</p>
            </div>
            <button 
-             onClick={() => void fetchData(qVal, true)}
+             onClick={() => void fetchData(qVal)}
              disabled={loading}
              className="flex items-center gap-2 bg-white border border-[#E2E8F0] px-4 py-2 rounded-[8px] text-[13px] font-[600] text-[#0F172A] hover:bg-[#F8FAFC] transition-colors shadow-sm disabled:opacity-50"
            >
