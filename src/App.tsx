@@ -20,6 +20,7 @@ import AIAssistant from './components/Tabs/AIAssistant';
 import OnboardingFlow from './components/OnboardingFlow';
 import SplashAuth from './components/SplashAuth';
 import Security from './components/Tabs/Security';
+import Legal from './components/Tabs/Legal';
 
 function App() {
   const {
@@ -106,6 +107,7 @@ function App() {
       case 'settings': return <SettingsTab />;
       case 'admin': return <AdminDashboard />;
       case 'security': return <Security />;
+      case 'legal': return <Legal />;
       default: return <Dashboard />;
     }
   };
@@ -130,7 +132,7 @@ function App() {
     );
   }
 
-  if (activeTab === 'security' && !user) {
+  if ((activeTab === 'legal' || activeTab === 'security') && !user) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-6xl mx-auto">
@@ -142,7 +144,7 @@ function App() {
               ← Back to Home / Login
             </button>
           </div>
-          <Security />
+          {activeTab === 'legal' ? <Legal /> : <Security />}
         </div>
       </div>
     );
@@ -316,7 +318,7 @@ function App() {
           <span className="font-medium">{backendReady ? 'Live' : 'Offline'}</span>
           <span className="hidden sm:inline">· Last synced: {lastSyncedTime}</span>
           <span>· Opportunities indexed & verified</span>
-          <span className="hidden md:inline">· YuvaHub © 2026 · <button onClick={() => setActiveTab('security')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-400">Security Center</button></span>
+          <span className="hidden md:inline">· YuvaHub © 2026 · <button onClick={() => setActiveTab('legal')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-450 font-medium">Privacy & Terms</button> · <button onClick={() => setActiveTab('security')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-400">Security Center</button></span>
         </div>
       </main>
 
