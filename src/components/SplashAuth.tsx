@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Sparkles, Globe, BrainCircuit, Search, Zap, Code, Lightbulb, Trophy, Target, ArrowRight, Mail, X, Github } from 'lucide-react';
 import { signInWithGoogle, signInWithGithub } from '../lib/firebase';
+import { useAppContext } from '../context/AppContext';
 
 export default function SplashAuth() {
+  const { setActiveTab } = useAppContext();
   const [loading, setLoading] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -280,7 +282,8 @@ export default function SplashAuth() {
             <div className="flex gap-6">
                <a href="#" className="text-[13px] text-[#64748B] hover:text-gray-900">Privacy Policy</a>
                <a href="#" className="text-[13px] text-[#64748B] hover:text-gray-900">Terms of Service</a>
-               <a href="#" className="text-[13px] text-[#64748B] hover:text-gray-900">Contact Us</a>
+               <button onClick={() => setActiveTab('security')} className="text-[13px] text-[#64748B] hover:text-gray-900 bg-transparent border-none cursor-pointer p-0 font-medium">Security</button>
+               <a href="mailto:support@yuvahub.com" className="text-[13px] text-[#64748B] hover:text-gray-900">Contact Us</a>
             </div>
          </div>
        </footer>

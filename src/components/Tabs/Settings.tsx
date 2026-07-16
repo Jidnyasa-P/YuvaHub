@@ -4,7 +4,7 @@ import { Bell, Lock, UserX, Database } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 
 export default function SettingsTab() {
-  const { user } = useAppContext();
+  const { user, setActiveTab } = useAppContext();
   const [notiMatches, setNotiMatches] = useState(true);
   const [notiDeadlines, setNotiDeadlines] = useState(true);
   const [notiMentor, setNotiMentor] = useState(true);
@@ -55,11 +55,20 @@ export default function SettingsTab() {
           </div>
           <div className="space-y-4">
             <button className="clean-btn-outline w-full sm:w-auto px-6 py-2">Change Password</button>
-            <div className="pt-4 mt-4 border-t border-gray-100 dark:border-gray-700">
-              <button className="px-6 py-2 bg-red-50 text-red-600 font-medium rounded-lg hover:bg-red-100 transition-colors">
-                Delete Account
+            <div className="pt-4 mt-4 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center">
+              <div>
+                <button className="px-6 py-2 bg-red-50 text-red-600 font-medium rounded-lg hover:bg-red-100 transition-colors">
+                  Delete Account
+                </button>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">This action is permanent and cannot be undone.</p>
+              </div>
+              <button 
+                onClick={() => setActiveTab('security')} 
+                className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
+              >
+                <span>Security Center</span>
+                <span className="text-sm">→</span>
               </button>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">This action is permanent and cannot be undone.</p>
             </div>
           </div>
         </div>
