@@ -1,5 +1,8 @@
 import express from "express";
 import http from "http";
+import { eventBus } from "./src/events/eventBus";
+import { createOpportunityScrapedConsumer } from "./src/consumers/opportunityScrapedConsumer";
+import { notificationConsumerHandler } from "./src/consumers/notificationConsumer";
 import { Server } from "socket.io";
 import { createServer as createViteServer } from "vite";
 import path from "path";
@@ -2905,4 +2908,23 @@ ${JSON.stringify(userProfile, null, 2)}
   });
 }
 
-startServer();
+async function bootstrap() {
+  try {
+    await startServer(); // startServer initializes db and starts express
+    
+    await eventBus.connect();
+    
+    // Setup DB Ingestion consumer (requires db)
+    const dbConsumer = await createOpportunityScrapedConsumer(db);
+    await eventBus.subscribe('dnl.opportunity.scraped.db', 'opportunity.scraped', dbConsumer);
+
+    // Setup Notification consumer
+    await eventBus.subscribe('dnl.opportunity.scraped.notification', 'opportunity.scraped', notificationConsumerHandler);
+
+    console.log('[EventBus] Consumers initialized successfully');
+  } catch (err) {
+    console.error("Failed to start event bus and consumers", err);
+  }
+}
+
+bootstrap();
