@@ -280,8 +280,8 @@ export default function SplashAuth() {
          <div className="pt-6 border-t border-[#E2E8F0] flex flex-col md:flex-row items-center justify-between gap-4">
             <span className="text-[13px] text-[#64748B]">&copy; 2026 YuvaHub Inc. All rights reserved.</span>
             <div className="flex gap-6">
-               <button onClick={() => setActiveTab('legal')} className="text-[13px] text-[#64748B] hover:text-gray-900 bg-transparent border-none cursor-pointer p-0 font-medium">Privacy Policy</button>
-               <button onClick={() => setActiveTab('legal')} className="text-[13px] text-[#64748B] hover:text-gray-900 bg-transparent border-none cursor-pointer p-0 font-medium">Terms of Service</button>
+               <button onClick={() => setActiveTab('privacy')} className="text-[13px] text-[#64748B] hover:text-gray-900 bg-transparent border-none cursor-pointer p-0 font-medium">Privacy Policy</button>
+               <button onClick={() => setActiveTab('terms')} className="text-[13px] text-[#64748B] hover:text-gray-900 bg-transparent border-none cursor-pointer p-0 font-medium">Terms of Service</button>
                <button onClick={() => setActiveTab('security')} className="text-[13px] text-[#64748B] hover:text-gray-900 bg-transparent border-none cursor-pointer p-0 font-medium">Security</button>
                <a href="mailto:support@yuvahub.com" className="text-[13px] text-[#64748B] hover:text-gray-900">Contact Us</a>
             </div>
@@ -329,9 +329,9 @@ export default function SplashAuth() {
             <div className="mt-8 text-center">
               <p className="text-xs text-gray-400">
                 By continuing, you agree to YuvaHub's{' '}
-                <button onClick={() => { setIsModalOpen(false); setActiveTab('legal'); }} className="text-blue-600 hover:underline bg-transparent border-none cursor-pointer p-0 font-medium">Terms of Service</button>
+                <button onClick={() => { setIsModalOpen(false); setActiveTab('terms'); }} className="text-blue-600 hover:underline bg-transparent border-none cursor-pointer p-0 font-medium">Terms of Service</button>
                 {' '}and{' '}
-                <button onClick={() => { setIsModalOpen(false); setActiveTab('legal'); }} className="text-blue-600 hover:underline bg-transparent border-none cursor-pointer p-0 font-medium">Privacy Policy</button>.
+                <button onClick={() => { setIsModalOpen(false); setActiveTab('privacy'); }} className="text-blue-600 hover:underline bg-transparent border-none cursor-pointer p-0 font-medium">Privacy Policy</button>.
               </p>
             </div>
           </div>

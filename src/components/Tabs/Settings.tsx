@@ -48,10 +48,10 @@ export default function SettingsTab() {
             <div className="pt-4 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center">
               <span className="text-xs text-gray-500 dark:text-gray-400">View our full policy and guidelines</span>
               <button 
-                onClick={() => setActiveTab('legal')} 
+                onClick={() => setActiveTab('privacy')} 
                 className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
               >
-                <span>Read Legal Terms</span>
+                <span>Read Privacy Policy</span>
                 <span className="text-sm">→</span>
               </button>
             </div>

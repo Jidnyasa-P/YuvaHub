@@ -21,6 +21,8 @@ import OnboardingFlow from './components/OnboardingFlow';
 import SplashAuth from './components/SplashAuth';
 import Security from './components/Tabs/Security';
 import Legal from './components/Tabs/Legal';
+import Privacy from './components/Tabs/Privacy';
+import Terms from './components/Tabs/Terms';
 
 function App() {
   const {
@@ -107,6 +109,8 @@ function App() {
       case 'settings': return <SettingsTab />;
       case 'admin': return <AdminDashboard />;
       case 'security': return <Security />;
+      case 'privacy': return <Privacy />;
+      case 'terms': return <Terms />;
       case 'legal': return <Legal />;
       default: return <Dashboard />;
     }
@@ -132,7 +136,7 @@ function App() {
     );
   }
 
-  if ((activeTab === 'legal' || activeTab === 'security') && !user) {
+  if ((activeTab === 'legal' || activeTab === 'security' || activeTab === 'privacy' || activeTab === 'terms') && !user) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-6xl mx-auto">
@@ -144,7 +148,7 @@ function App() {
               ← Back to Home / Login
             </button>
           </div>
-          {activeTab === 'legal' ? <Legal /> : <Security />}
+          {activeTab === 'privacy' ? <Privacy /> : activeTab === 'terms' ? <Terms /> : activeTab === 'legal' ? <Legal /> : <Security />}
         </div>
       </div>
     );
@@ -320,7 +324,7 @@ function App() {
           <span className="font-medium">{backendReady ? 'Live' : 'Offline'}</span>
           <span className="hidden sm:inline">· Last synced: {lastSyncedTime}</span>
           <span>· Opportunities indexed & verified</span>
-          <span className="hidden md:inline">· YuvaHub © 2026 · <button onClick={() => setActiveTab('legal')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-450 font-medium">Privacy & Terms</button> · <button onClick={() => setActiveTab('security')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-400">Security Center</button></span>
+          <span className="hidden md:inline">· YuvaHub © 2026 · <button onClick={() => setActiveTab('privacy')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-450 font-medium font-semibold">Privacy Policy</button> · <button onClick={() => setActiveTab('terms')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-450 font-medium font-semibold">Terms of Service</button> · <button onClick={() => setActiveTab('legal')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-400">Legal Index</button> · <button onClick={() => setActiveTab('security')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-400">Security Center</button></span>
         </div>
       </main>
 
