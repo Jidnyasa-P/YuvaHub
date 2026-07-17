@@ -17,14 +17,11 @@ import AdminDashboard from './components/Admin/AdminDashboard';
 import NotificationDropdown from './components/ui/NotificationDropdown';
 import OpportunityDetail from './components/Tabs/OpportunityDetail';
 import AIAssistant from './components/Tabs/AIAssistant';
-import OnboardingFlow from './components/OnboardingFlow';
+import BackToTopButton from './components/ui/BackToTopButton';import OnboardingFlow from './components/OnboardingFlow';
 import SplashAuth from './components/SplashAuth';
 import Security from './components/Tabs/Security';
 import Legal from './components/Tabs/Legal';
-import Privacy from './components/Tabs/Privacy';
-import Terms from './components/Tabs/Terms';
-import Cookies from './components/Tabs/Cookies';
-import Guidelines from './components/Tabs/Guidelines';
+import Support from './components/Tabs/Support';
 
 function App() {
   const {
@@ -116,6 +113,7 @@ function App() {
       case 'cookies': return <Cookies />;
       case 'guidelines': return <Guidelines />;
       case 'legal': return <Legal />;
+      case 'support': return <Support />;
       default: return <Dashboard />;
     }
   };
@@ -140,7 +138,7 @@ function App() {
     );
   }
 
-  if ((activeTab === 'legal' || activeTab === 'security' || activeTab === 'privacy' || activeTab === 'terms' || activeTab === 'cookies' || activeTab === 'guidelines') && !user) {
+  if ((activeTab === 'legal' || activeTab === 'security' || activeTab === 'support') && !user) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-6xl mx-auto">
@@ -152,7 +150,7 @@ function App() {
               ← Back to Home / Login
             </button>
           </div>
-          {activeTab === 'privacy' ? <Privacy /> : activeTab === 'terms' ? <Terms /> : activeTab === 'cookies' ? <Cookies /> : activeTab === 'guidelines' ? <Guidelines /> : activeTab === 'legal' ? <Legal /> : <Security />}
+          {activeTab === 'legal' ? <Legal /> : activeTab === 'security' ? <Security /> : <Support />}
         </div>
       </div>
     );
@@ -321,7 +319,9 @@ function App() {
             renderContent()
           )}
         </div>
-        
+
+        <BackToTopButton />
+
         {/* Live Feed Strip Footer */}
         <div className="absolute bottom-0 left-0 right-0 bg-gray-900 text-gray-400 text-xs py-2 px-6 flex items-center justify-center gap-2 border-t border-gray-800 z-20">
           <span className={`${backendReady ? 'text-green-400' : 'text-red-400'} animate-pulse`}>●</span> 

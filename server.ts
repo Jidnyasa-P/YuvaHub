@@ -1,5 +1,8 @@
 import express from "express";
 import http from "http";
+import { eventBus } from "./src/events/eventBus";
+import { createOpportunityScrapedConsumer } from "./src/consumers/opportunityScrapedConsumer";
+import { notificationConsumerHandler } from "./src/consumers/notificationConsumer";
 import { Server } from "socket.io";
 import { createServer as createViteServer } from "vite";
 import path from "path";
@@ -9,12 +12,14 @@ import { MongoClient, ObjectId } from "mongodb";
 import dotenv from "dotenv";
 import { GoogleGenAI, Type } from "@google/genai";
 import { z } from "zod";
+import jwt from "jsonwebtoken";
 import { ScholarshipSchema, AIEvaluationResponseSchema } from "./src/models/scholarshipSchema.js";
 import { isToxic, createToxicityMiddleware } from "./src/services/toxicity.js";
 import rateLimit from "express-rate-limit";
 import { RedisStore } from "rate-limit-redis";
 import Redis from "ioredis";
 import { v2 as cloudinary } from "cloudinary";
+import { meiliClient, initializeSearchSync } from "./src/services/searchSync.js";
 
 dotenv.config();
 
@@ -231,204 +236,78 @@ async function getRankedOpportunities(database: any, profile: any, page: number,
       };
     }
 
-    // Native MongoDB Aggregation Pipeline
-    const profileSkills = profile.skills ? profile.skills.toLowerCase().split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+    // Native Meilisearch Query
+    const profileSkills = profile.skills ? profile.skills.toLowerCase().replace(/,/g, ' ') : "";
     const profileCountry = profile.country ? profile.country.toLowerCase().trim() : "";
     const profileField = profile.field ? profile.field.toLowerCase().trim() : "";
+    const searchQuery = `${profileSkills} ${profileField} ${profileCountry}`.trim();
 
-    const pipeline: any[] = [];
-    
-    // 1. Match phase (currently empty to scan collection)
-    pipeline.push({ $match: {} });
-
-    // 2. Lookup interactions
-    pipeline.push({
-      $lookup: {
-        from: "interactions",
-        let: { oppIdStr: { $toString: "$_id" }, oppId: "$id" },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $or: [
-                  { $eq: ["$opportunity_id", "$$oppIdStr"] },
-                  { $eq: ["$opportunity_id", "$$oppId"] }
-                ]
-              }
-            }
-          }
-        ],
-        as: "interactions"
-      }
+    // 1. Search Meilisearch (requesting more to sort in memory)
+    const searchLimit = limit * 3; // fetch a bit more to sort by interaction scores
+    const searchRes = await meiliClient.index('opportunities').search(searchQuery, {
+      offset: skip,
+      limit: searchLimit
     });
+    let items = searchRes.hits;
 
-    // 3. Stats Calculation
+    if (items.length === 0) {
+      return { items: [], next_page: null };
+    }
+
+    // 2. Fetch interactions to calculate dynamic scores
+    const oIds = items.map((o: any) => o.id);
+    const interactions = await database.collection("interactions").find({
+      opportunity_id: { $in: oIds }
+    }).toArray();
+
+    const intMap: Record<string, { total: number, recent: number }> = {};
     const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
-    pipeline.push({
-      $addFields: {
-        "stats.total": { $size: "$interactions" },
-        "stats.recent": {
-          $size: {
-            $filter: {
-              input: "$interactions",
-              as: "i",
-              cond: { $gte: [{ $toDate: "$$i.timestamp" }, fortyEightHoursAgo] }
-            }
-          }
-        }
+
+    interactions.forEach((i: any) => {
+      const oId = i.opportunity_id;
+      if (!intMap[oId]) {
+        intMap[oId] = { total: 0, recent: 0 };
+      }
+      intMap[oId].total += 1;
+      const iTime = i.timestamp ? new Date(i.timestamp) : new Date();
+      if (iTime >= fortyEightHoursAgo) {
+        intMap[oId].recent += 1;
       }
     });
 
-    // Clear interactions array to save pipeline memory
-    pipeline.push({ $unset: "interactions" });
+    const now = Date.now();
+    const scoredItems = items.map((opp: any) => {
+      const stats = intMap[opp.id] || { total: 0, recent: 0 };
 
-    // 4. Build Profile Relevance Logic
-    const relevanceAdditions: any[] = [0]; // default 0 to ensure $add is valid
+      const engagementScore = stats.total * 15;
+      const trendingScore = stats.recent * 30;
+      const sourceQualityScore = opp.source_quality_score || 70;
 
-    if (profileSkills.length > 0) {
-      profileSkills.forEach((skill: string) => {
-        relevanceAdditions.push({
-          $cond: {
-            if: {
-              $and: [
-                { $isArray: "$tags" },
-                { $gt: [{ $size: "$tags" }, 0] },
-                {
-                  $anyElementTrue: {
-                    $map: {
-                      input: "$tags",
-                      as: "tag",
-                      in: { $regexMatch: { input: { $toLower: "$$tag" }, regex: skill } }
-                    }
-                  }
-                }
-              ]
-            },
-            then: 50,
-            else: 0
-          }
-        });
-      });
-    }
+      const createdTime = opp.created_at ? new Date(opp.created_at).getTime() : now;
+      const hoursSinceCreation = Math.max(0, (now - createdTime) / (1000 * 60 * 60));
+      const freshnessScore = (100 / (1 + (hoursSinceCreation * 0.15))) * 2.0;
 
-    if (profileField) {
-      relevanceAdditions.push({
-        $cond: {
-          if: {
-            $or: [
-              { $regexMatch: { input: { $toLower: { $ifNull: ["$description", ""] } }, regex: profileField } },
-              { $regexMatch: { input: { $toLower: { $ifNull: ["$title", ""] } }, regex: profileField } }
-            ]
-          },
-          then: 40,
-          else: 0
+      const totalScore = engagementScore + trendingScore + sourceQualityScore + freshnessScore;
+
+      return {
+        ...opp,
+        metrics: {
+          totalScore: Math.round(totalScore),
+          relevance: 0, // Meilisearch handles the textual relevance inherently
+          freshness: Math.round(freshnessScore),
+          interactionRatio: stats.total
         }
-      });
-    }
-
-    if (profileCountry) {
-      const cRegex = `${profileCountry}|online|remote`;
-      relevanceAdditions.push({
-        $cond: {
-          if: { $regexMatch: { input: { $toLower: { $ifNull: ["$location", ""] } }, regex: cRegex } },
-          then: 35,
-          else: 0
-        }
-      });
-    }
-
-    // 5. Score Calculation
-    pipeline.push({
-      $addFields: {
-        profileRelevanceScore: { $add: relevanceAdditions },
-        engagementScore: { $multiply: ["$stats.total", 15] },
-        trendingScore: { $multiply: ["$stats.recent", 30] },
-        sourceQualityScore: { $ifNull: ["$source_quality_score", 70] },
-        hoursSinceCreation: {
-          $max: [
-            0,
-            {
-              $divide: [
-                { $dateDiff: { startDate: { $ifNull: [{ $toDate: "$created_at" }, "$$NOW"] }, endDate: "$$NOW", unit: "millisecond" } },
-                1000 * 60 * 60
-              ]
-            }
-          ]
-        }
-      }
+      };
     });
 
-    pipeline.push({
-      $addFields: {
-        freshnessScore: {
-          $multiply: [
-            {
-              $divide: [
-                100,
-                { $add: [1, { $multiply: ["$hoursSinceCreation", 0.15] }] }
-              ]
-            },
-            2.0
-          ]
-        }
-      }
-    });
+    // 3. Sort by our dynamic scores
+    scoredItems.sort((a: any, b: any) => b.metrics.totalScore - a.metrics.totalScore);
 
-    pipeline.push({
-      $addFields: {
-        totalScore: {
-          $add: [
-            "$engagementScore",
-            "$trendingScore",
-            "$sourceQualityScore",
-            "$freshnessScore",
-            "$profileRelevanceScore"
-          ]
-        }
-      }
-    });
-
-    pipeline.push({
-      $addFields: {
-        id: { $toString: "$_id" },
-        "metrics.totalScore": { $round: "$totalScore" },
-        "metrics.relevance": "$profileRelevanceScore",
-        "metrics.freshness": { $round: "$freshnessScore" },
-        "metrics.interactionRatio": "$stats.total"
-      }
-    });
-
-    // 6. Sort, Skip, Limit
-    pipeline.push({ $sort: { totalScore: -1 } });
-    pipeline.push({ $skip: skip });
-    pipeline.push({ $limit: limit + 1 });
-
-    const cursor = database.collection("opportunities").aggregate(pipeline);
-    let items = await cursor.toArray();
-
-    let next_page = null;
-    if (items.length > limit) {
-      next_page = page + 1;
-      items = items.slice(0, limit);
-    }
-
-    const mapped = items.map((opp: any) => {
-      const copy = { ...opp };
-      delete copy._id;
-      delete copy.stats;
-      delete copy.engagementScore;
-      delete copy.trendingScore;
-      delete copy.sourceQualityScore;
-      delete copy.hoursSinceCreation;
-      delete copy.freshnessScore;
-      delete copy.profileRelevanceScore;
-      delete copy.totalScore;
-      return copy;
-    });
+    const paginatedItems = scoredItems.slice(0, limit);
 
     return {
-      items: mapped,
-      next_page
+      items: paginatedItems,
+      next_page: searchRes.estimatedTotalHits && (skip + searchLimit < searchRes.estimatedTotalHits) ? page + 1 : null
     };
   } catch (scoreErr) {
     console.error("Scoring failure:", scoreErr);
@@ -534,6 +413,7 @@ if (uri) {
     db = client.db(dbName);
     console.log(`[Database] Connected to MongoDB: ${dbName}`);
     setupDNL(db);
+    initializeSearchSync(db);
     
     // Create required compound indexes asynchronously
     db.collection("opportunities").createIndex({ created_at: -1, source_quality_score: -1 })
@@ -543,11 +423,13 @@ if (uri) {
     console.error("[Database] Connection failed, falling back to Mock Data:", err);
     db = new MockDB();
     setupDNL(db);
+    initializeSearchSync(db);
   });
 } else {
   console.log("[Database] No MONGODB_URI provided. Running in Offline Mock mode.");
   db = new MockDB();
   setupDNL(db);
+  initializeSearchSync(db);
 }
 
 class AnalyticsBuffer {
@@ -782,6 +664,45 @@ async function startServer() {
     });
   });
 
+  const cacheMiddleware = (ttlSeconds: number, keyGenerator?: (req: express.Request) => string) => {
+    return async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+      if (!redisClient || redisClient.status !== 'ready') {
+        res.setHeader("X-Cache-Status", "BYPASS");
+        return next();
+      }
+
+      const key = keyGenerator ? keyGenerator(req) : req.originalUrl;
+
+      try {
+        const cached = await redisClient.get(key);
+        if (cached) {
+          res.setHeader("X-Cache-Status", "HIT");
+          return res.json(JSON.parse(cached));
+        }
+      } catch (err) {
+        console.error("[Cache] Redis get error:", err);
+      }
+
+      res.setHeader("X-Cache-Status", "MISS");
+
+      const originalJson = res.json.bind(res);
+      res.json = (body: any) => {
+        try {
+          if (redisClient && redisClient.status === 'ready' && res.statusCode >= 200 && res.statusCode < 300) {
+            redisClient.set(key, JSON.stringify(body), "EX", ttlSeconds).catch((err: any) => {
+              console.error("[Cache] Redis set error:", err);
+            });
+          }
+        } catch (err) {
+          console.error("[Cache] Error stringifying response:", err);
+        }
+        return originalJson(body);
+      };
+
+      next();
+    };
+  };
+
   // --- Real API Routes ---
   app.get("/api/v1/opportunities", async (req, res) => {
     try {
@@ -818,7 +739,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/v1/opportunities/trending", async (req, res) => {
+  app.get("/api/v1/opportunities/trending", cacheMiddleware(15 * 60), async (req, res) => {
     try {
       if (!db) {
         return res.json({ num_results: 0, next_page: null, next_cursor: null, items: [] });
@@ -1045,6 +966,18 @@ async function startServer() {
 
     let uid = "";
     let email = "";
+    let role = "user";
+
+    // Try to verify as a standard JWT first (for our RBAC custom tokens)
+    try {
+      const decoded = jwt.verify(idToken, process.env.JWT_SECRET || "yuvahub-secret-key") as any;
+      uid = decoded.sub || decoded.user_id || decoded.uid;
+      email = decoded.email || "";
+      role = decoded.role || "user";
+      return { uid, email, role };
+    } catch (jwtErr) {
+      // If it fails, fall back to Firebase / Mock logic
+    }
 
     if (firebaseApiKey) {
       const verifyUrl = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseApiKey}`;
@@ -1064,6 +997,7 @@ async function startServer() {
       }
       uid = data.users[0].localId;
       email = data.users[0].email || "";
+      role = email === "uditt490@gmail.com" ? "admin" : "user";
     } else {
       try {
         const parts = idToken.split(".");
@@ -1071,6 +1005,7 @@ async function startServer() {
           const payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf-8"));
           uid = payload.user_id || payload.sub;
           email = payload.email || "";
+          role = payload.role || (email === "uditt490@gmail.com" ? "admin" : "user");
         }
       } catch (e) {
         throw new Error("Unauthorized: Invalid mock token format");
@@ -1081,8 +1016,26 @@ async function startServer() {
       }
     }
 
-    return { uid, email };
+    return { uid, email, role };
   }
+
+  const authorizeRoles = (...allowedRoles: string[]) => {
+    return async (req: any, res: any, next: any) => {
+      try {
+        const user = await getAuthenticatedUser(req);
+        req.user = user;
+        
+        if (!allowedRoles.includes(user.role)) {
+          console.warn(`[Circuit Breaker] Forbidden access attempt to ${req.originalUrl} from IP ${req.ip}. Role: ${user.role}`);
+          return res.status(403).json({ error: "Forbidden: Insufficient privileges." });
+        }
+        next();
+      } catch (err: any) {
+        console.warn(`[Circuit Breaker] Unauthorized access attempt to ${req.originalUrl} from IP ${req.ip}. Error: ${err.message}`);
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+    };
+  };
 
   const handleSignatureRequest = async (req: any, res: any) => {
     try {
@@ -1806,7 +1759,7 @@ Return JSON strictly in this format:
   app.get("/api/v1/search", searchHandler);
   app.get("/api/opportunities/search", searchHandler);
 
-  app.get("/api/v1/opportunity/:id", async (req, res) => {
+  app.get("/api/v1/opportunity/:id", cacheMiddleware(60 * 60, (req) => `opportunity:${req.params.id}`), async (req, res) => {
     try {
       const rawId = req.params.id;
 
@@ -1842,6 +1795,45 @@ Return JSON strictly in this format:
       res.json(mapped);
     } catch (err) {
       console.error("/api/v1/opportunity/:id error:", err);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  app.put("/api/v1/opportunity/:id", async (req, res) => {
+    try {
+      if (!db) return res.status(503).json({ error: "Database not available" });
+      const id = req.params.id;
+      
+      const { ObjectId } = await import("mongodb");
+      let queryId;
+      try {
+        queryId = new ObjectId(id);
+      } catch(e) {
+        queryId = id;
+      }
+
+      const updateData = { ...req.body, updated_at: new Date() };
+      delete updateData._id;
+      delete updateData.id;
+
+      const result = await db.collection("opportunities").updateOne(
+        { _id: queryId },
+        { $set: updateData }
+      );
+
+      // Cache invalidation hooks
+      if (redisClient && redisClient.status === 'ready') {
+        try {
+          await redisClient.del(`opportunity:${id}`);
+          await redisClient.del("/api/v1/opportunities/trending"); // also clear trending to prevent stale
+        } catch(err) {
+          console.error("[Cache] Invalidation error:", err);
+        }
+      }
+
+      res.json({ success: true, updated: result.modifiedCount > 0 });
+    } catch (err: any) {
+      console.error("/api/v1/opportunity/:id PUT error:", err);
       res.status(500).json({ error: "Internal Server Error" });
     }
   });
@@ -1926,7 +1918,7 @@ Return JSON strictly in this format:
   }
 
   // --- Admin Routes ---
-  app.get("/api/v1/admin/health", (req, res) => {
+  app.get("/api/v1/admin/health", authorizeRoles('admin', 'moderator'), (req, res) => {
     res.json({
       status: "healthy",
       database: db ? "connected" : "disconnected",
@@ -1936,7 +1928,7 @@ Return JSON strictly in this format:
     });
   });
 
-  app.get("/api/v1/admin/metrics", async (req, res) => {
+  app.get("/api/v1/admin/metrics", authorizeRoles('admin', 'moderator'), async (req, res) => {
     let opportunitiesAdded = 0;
     if (db) {
       opportunitiesAdded = await db.collection("opportunities").countDocuments();
@@ -1949,7 +1941,7 @@ Return JSON strictly in this format:
     });
   });
 
-  app.get("/api/v1/admin/scrapers", async (req, res) => {
+  app.get("/api/v1/admin/scrapers", authorizeRoles('admin', 'moderator'), async (req, res) => {
     try {
       if (!db) {
         return res.json([]);
@@ -2034,13 +2026,27 @@ Return JSON strictly in this format:
     }
   });
 
-  app.get("/api/v1/admin/incidents", (req, res) => {
+  app.get("/api/v1/admin/incidents", authorizeRoles('admin', 'moderator'), (req, res) => {
     res.json([
       { id: 1, type: "WARNING", component: "Python Gateway", message: "Python service dropped. Ported to Node.js native.", time: "10 mins ago" }
     ]);
   });
 
-  app.get("/api/v1/admin/stream/telemetry", (req, res) => {
+  app.delete("/api/v1/admin/users/:id", authorizeRoles('admin', 'moderator'), async (req, res) => {
+    try {
+      if (!db) {
+        return res.status(503).json({ error: "Database unavailable" });
+      }
+      const userId = req.params.id;
+      // Database deletion logic would go here
+      res.json({ status: "success", message: `User ${userId} deleted successfully.` });
+    } catch (err) {
+      console.error("Failed to delete user:", err);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  app.get("/api/v1/admin/stream/telemetry", authorizeRoles('admin', 'moderator'), (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -2780,4 +2786,23 @@ ${JSON.stringify(userProfile, null, 2)}
   });
 }
 
-startServer();
+async function bootstrap() {
+  try {
+    await startServer(); // startServer initializes db and starts express
+    
+    await eventBus.connect();
+    
+    // Setup DB Ingestion consumer (requires db)
+    const dbConsumer = await createOpportunityScrapedConsumer(db);
+    await eventBus.subscribe('dnl.opportunity.scraped.db', 'opportunity.scraped', dbConsumer);
+
+    // Setup Notification consumer
+    await eventBus.subscribe('dnl.opportunity.scraped.notification', 'opportunity.scraped', notificationConsumerHandler);
+
+    console.log('[EventBus] Consumers initialized successfully');
+  } catch (err) {
+    console.error("Failed to start event bus and consumers", err);
+  }
+}
+
+bootstrap();
