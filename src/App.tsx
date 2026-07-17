@@ -21,6 +21,7 @@ import OnboardingFlow from './components/OnboardingFlow';
 import SplashAuth from './components/SplashAuth';
 import Security from './components/Tabs/Security';
 import Legal from './components/Tabs/Legal';
+import Support from './components/Tabs/Support';
 
 function App() {
   const {
@@ -108,6 +109,7 @@ function App() {
       case 'admin': return <AdminDashboard />;
       case 'security': return <Security />;
       case 'legal': return <Legal />;
+      case 'support': return <Support />;
       default: return <Dashboard />;
     }
   };
@@ -132,7 +134,7 @@ function App() {
     );
   }
 
-  if ((activeTab === 'legal' || activeTab === 'security') && !user) {
+  if ((activeTab === 'legal' || activeTab === 'security' || activeTab === 'support') && !user) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-6xl mx-auto">
@@ -144,7 +146,7 @@ function App() {
               ← Back to Home / Login
             </button>
           </div>
-          {activeTab === 'legal' ? <Legal /> : <Security />}
+          {activeTab === 'legal' ? <Legal /> : activeTab === 'security' ? <Security /> : <Support />}
         </div>
       </div>
     );

@@ -72,13 +72,22 @@ export default function SettingsTab() {
                 </button>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">This action is permanent and cannot be undone.</p>
               </div>
-              <button 
-                onClick={() => setActiveTab('security')} 
-                className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
-              >
-                <span>Security Center</span>
-                <span className="text-sm">→</span>
-              </button>
+              <div className="flex gap-4">
+                <button 
+                  onClick={() => setActiveTab('security')} 
+                  className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
+                >
+                  <span>Security Center</span>
+                  <span className="text-sm">→</span>
+                </button>
+                <button 
+                  onClick={() => setActiveTab('support')} 
+                  className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
+                >
+                  <span>Support & Feedback</span>
+                  <span className="text-sm">→</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

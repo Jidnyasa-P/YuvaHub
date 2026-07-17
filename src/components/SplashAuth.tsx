@@ -283,7 +283,7 @@ export default function SplashAuth() {
                <button onClick={() => setActiveTab('legal')} className="text-[13px] text-[#64748B] hover:text-gray-900 bg-transparent border-none cursor-pointer p-0 font-medium">Privacy Policy</button>
                <button onClick={() => setActiveTab('legal')} className="text-[13px] text-[#64748B] hover:text-gray-900 bg-transparent border-none cursor-pointer p-0 font-medium">Terms of Service</button>
                <button onClick={() => setActiveTab('security')} className="text-[13px] text-[#64748B] hover:text-gray-900 bg-transparent border-none cursor-pointer p-0 font-medium">Security</button>
-               <a href="mailto:support@yuvahub.com" className="text-[13px] text-[#64748B] hover:text-gray-900">Contact Us</a>
+               <button onClick={() => setActiveTab('support')} className="text-[13px] text-[#64748B] hover:text-gray-900 bg-transparent border-none cursor-pointer p-0 font-medium">Support & Feedback</button>
             </div>
          </div>
        </footer>
