@@ -15,6 +15,7 @@ import rateLimit from "express-rate-limit";
 import { RedisStore } from "rate-limit-redis";
 import Redis from "ioredis";
 import { v2 as cloudinary } from "cloudinary";
+import { meiliClient, initializeSearchSync } from "./src/services/searchSync.js";
 
 dotenv.config();
 
@@ -231,204 +232,78 @@ async function getRankedOpportunities(database: any, profile: any, page: number,
       };
     }
 
-    // Native MongoDB Aggregation Pipeline
-    const profileSkills = profile.skills ? profile.skills.toLowerCase().split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+    // Native Meilisearch Query
+    const profileSkills = profile.skills ? profile.skills.toLowerCase().replace(/,/g, ' ') : "";
     const profileCountry = profile.country ? profile.country.toLowerCase().trim() : "";
     const profileField = profile.field ? profile.field.toLowerCase().trim() : "";
+    const searchQuery = `${profileSkills} ${profileField} ${profileCountry}`.trim();
 
-    const pipeline: any[] = [];
-    
-    // 1. Match phase (currently empty to scan collection)
-    pipeline.push({ $match: {} });
-
-    // 2. Lookup interactions
-    pipeline.push({
-      $lookup: {
-        from: "interactions",
-        let: { oppIdStr: { $toString: "$_id" }, oppId: "$id" },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $or: [
-                  { $eq: ["$opportunity_id", "$$oppIdStr"] },
-                  { $eq: ["$opportunity_id", "$$oppId"] }
-                ]
-              }
-            }
-          }
-        ],
-        as: "interactions"
-      }
+    // 1. Search Meilisearch (requesting more to sort in memory)
+    const searchLimit = limit * 3; // fetch a bit more to sort by interaction scores
+    const searchRes = await meiliClient.index('opportunities').search(searchQuery, {
+      offset: skip,
+      limit: searchLimit
     });
+    let items = searchRes.hits;
 
-    // 3. Stats Calculation
+    if (items.length === 0) {
+      return { items: [], next_page: null };
+    }
+
+    // 2. Fetch interactions to calculate dynamic scores
+    const oIds = items.map((o: any) => o.id);
+    const interactions = await database.collection("interactions").find({
+      opportunity_id: { $in: oIds }
+    }).toArray();
+
+    const intMap: Record<string, { total: number, recent: number }> = {};
     const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
-    pipeline.push({
-      $addFields: {
-        "stats.total": { $size: "$interactions" },
-        "stats.recent": {
-          $size: {
-            $filter: {
-              input: "$interactions",
-              as: "i",
-              cond: { $gte: [{ $toDate: "$$i.timestamp" }, fortyEightHoursAgo] }
-            }
-          }
-        }
+
+    interactions.forEach((i: any) => {
+      const oId = i.opportunity_id;
+      if (!intMap[oId]) {
+        intMap[oId] = { total: 0, recent: 0 };
+      }
+      intMap[oId].total += 1;
+      const iTime = i.timestamp ? new Date(i.timestamp) : new Date();
+      if (iTime >= fortyEightHoursAgo) {
+        intMap[oId].recent += 1;
       }
     });
 
-    // Clear interactions array to save pipeline memory
-    pipeline.push({ $unset: "interactions" });
+    const now = Date.now();
+    const scoredItems = items.map((opp: any) => {
+      const stats = intMap[opp.id] || { total: 0, recent: 0 };
 
-    // 4. Build Profile Relevance Logic
-    const relevanceAdditions: any[] = [0]; // default 0 to ensure $add is valid
+      const engagementScore = stats.total * 15;
+      const trendingScore = stats.recent * 30;
+      const sourceQualityScore = opp.source_quality_score || 70;
 
-    if (profileSkills.length > 0) {
-      profileSkills.forEach((skill: string) => {
-        relevanceAdditions.push({
-          $cond: {
-            if: {
-              $and: [
-                { $isArray: "$tags" },
-                { $gt: [{ $size: "$tags" }, 0] },
-                {
-                  $anyElementTrue: {
-                    $map: {
-                      input: "$tags",
-                      as: "tag",
-                      in: { $regexMatch: { input: { $toLower: "$$tag" }, regex: skill } }
-                    }
-                  }
-                }
-              ]
-            },
-            then: 50,
-            else: 0
-          }
-        });
-      });
-    }
+      const createdTime = opp.created_at ? new Date(opp.created_at).getTime() : now;
+      const hoursSinceCreation = Math.max(0, (now - createdTime) / (1000 * 60 * 60));
+      const freshnessScore = (100 / (1 + (hoursSinceCreation * 0.15))) * 2.0;
 
-    if (profileField) {
-      relevanceAdditions.push({
-        $cond: {
-          if: {
-            $or: [
-              { $regexMatch: { input: { $toLower: { $ifNull: ["$description", ""] } }, regex: profileField } },
-              { $regexMatch: { input: { $toLower: { $ifNull: ["$title", ""] } }, regex: profileField } }
-            ]
-          },
-          then: 40,
-          else: 0
+      const totalScore = engagementScore + trendingScore + sourceQualityScore + freshnessScore;
+
+      return {
+        ...opp,
+        metrics: {
+          totalScore: Math.round(totalScore),
+          relevance: 0, // Meilisearch handles the textual relevance inherently
+          freshness: Math.round(freshnessScore),
+          interactionRatio: stats.total
         }
-      });
-    }
-
-    if (profileCountry) {
-      const cRegex = `${profileCountry}|online|remote`;
-      relevanceAdditions.push({
-        $cond: {
-          if: { $regexMatch: { input: { $toLower: { $ifNull: ["$location", ""] } }, regex: cRegex } },
-          then: 35,
-          else: 0
-        }
-      });
-    }
-
-    // 5. Score Calculation
-    pipeline.push({
-      $addFields: {
-        profileRelevanceScore: { $add: relevanceAdditions },
-        engagementScore: { $multiply: ["$stats.total", 15] },
-        trendingScore: { $multiply: ["$stats.recent", 30] },
-        sourceQualityScore: { $ifNull: ["$source_quality_score", 70] },
-        hoursSinceCreation: {
-          $max: [
-            0,
-            {
-              $divide: [
-                { $dateDiff: { startDate: { $ifNull: [{ $toDate: "$created_at" }, "$$NOW"] }, endDate: "$$NOW", unit: "millisecond" } },
-                1000 * 60 * 60
-              ]
-            }
-          ]
-        }
-      }
+      };
     });
 
-    pipeline.push({
-      $addFields: {
-        freshnessScore: {
-          $multiply: [
-            {
-              $divide: [
-                100,
-                { $add: [1, { $multiply: ["$hoursSinceCreation", 0.15] }] }
-              ]
-            },
-            2.0
-          ]
-        }
-      }
-    });
+    // 3. Sort by our dynamic scores
+    scoredItems.sort((a: any, b: any) => b.metrics.totalScore - a.metrics.totalScore);
 
-    pipeline.push({
-      $addFields: {
-        totalScore: {
-          $add: [
-            "$engagementScore",
-            "$trendingScore",
-            "$sourceQualityScore",
-            "$freshnessScore",
-            "$profileRelevanceScore"
-          ]
-        }
-      }
-    });
-
-    pipeline.push({
-      $addFields: {
-        id: { $toString: "$_id" },
-        "metrics.totalScore": { $round: "$totalScore" },
-        "metrics.relevance": "$profileRelevanceScore",
-        "metrics.freshness": { $round: "$freshnessScore" },
-        "metrics.interactionRatio": "$stats.total"
-      }
-    });
-
-    // 6. Sort, Skip, Limit
-    pipeline.push({ $sort: { totalScore: -1 } });
-    pipeline.push({ $skip: skip });
-    pipeline.push({ $limit: limit + 1 });
-
-    const cursor = database.collection("opportunities").aggregate(pipeline);
-    let items = await cursor.toArray();
-
-    let next_page = null;
-    if (items.length > limit) {
-      next_page = page + 1;
-      items = items.slice(0, limit);
-    }
-
-    const mapped = items.map((opp: any) => {
-      const copy = { ...opp };
-      delete copy._id;
-      delete copy.stats;
-      delete copy.engagementScore;
-      delete copy.trendingScore;
-      delete copy.sourceQualityScore;
-      delete copy.hoursSinceCreation;
-      delete copy.freshnessScore;
-      delete copy.profileRelevanceScore;
-      delete copy.totalScore;
-      return copy;
-    });
+    const paginatedItems = scoredItems.slice(0, limit);
 
     return {
-      items: mapped,
-      next_page
+      items: paginatedItems,
+      next_page: searchRes.estimatedTotalHits && (skip + searchLimit < searchRes.estimatedTotalHits) ? page + 1 : null
     };
   } catch (scoreErr) {
     console.error("Scoring failure:", scoreErr);
@@ -534,6 +409,7 @@ if (uri) {
     db = client.db(dbName);
     console.log(`[Database] Connected to MongoDB: ${dbName}`);
     setupDNL(db);
+    initializeSearchSync(db);
     
     // Create required compound indexes asynchronously
     db.collection("opportunities").createIndex({ created_at: -1, source_quality_score: -1 })
@@ -543,11 +419,13 @@ if (uri) {
     console.error("[Database] Connection failed, falling back to Mock Data:", err);
     db = new MockDB();
     setupDNL(db);
+    initializeSearchSync(db);
   });
 } else {
   console.log("[Database] No MONGODB_URI provided. Running in Offline Mock mode.");
   db = new MockDB();
   setupDNL(db);
+  initializeSearchSync(db);
 }
 
 class AnalyticsBuffer {
