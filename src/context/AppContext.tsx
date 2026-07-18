@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import React, { 
+  createContext, 
+  useContext, 
+  useState, 
+  useEffect, 
+  useRef, 
+  useCallback 
+} from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
@@ -66,6 +73,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+const [activeTab, setActiveTab] = useState("home");
+const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+const [selectedOppId, setSelectedOppId] = useState<string | null>(null);
+
+const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
   // Authentication state
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -422,6 +435,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       profile,
       setProfile,
       loading,
+      bookmarkedIds,
+toggleBookmark,
+isBookmarked,
       backendReady,
       lastSyncedTime,
       appSearchQuery,

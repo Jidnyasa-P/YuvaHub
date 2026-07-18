@@ -1,3 +1,5 @@
+import { addApplicationJob } from "./src/queues/applicationQueue";
+import { generateApplicationDraft } from "./src/services/applicationGenerator";
 import express from "express";
 import http from "http";
 import { eventBus } from "./src/events/eventBus";
@@ -2565,7 +2567,155 @@ Return JSON strictly in this format:
       res.status(500).json({ error: "Internal Server Error" });
     }
   });
+/**
+ * Application Assist Routes
+ *
+ * Handles:
+ * - AI application draft generation
+ * - Async application processing
+ */
 
+
+app.post(
+  "/api/v1/applications/generate-draft",
+  async (req, res) => {
+
+    try {
+
+      const {
+        opportunity,
+        profile
+      } = req.body;
+
+
+
+      if (!opportunity?.title) {
+
+        return res.status(400).json({
+          error:
+            "Opportunity details required"
+        });
+
+      }
+
+
+
+      const draft =
+        await generateApplicationDraft({
+
+          opportunityTitle:
+            opportunity.title,
+
+          organization:
+            opportunity.organization ||
+            opportunity.org,
+
+          profile
+
+        });
+
+
+
+      return res.json({
+
+        success: true,
+
+        content: draft
+
+      });
+
+
+
+    } catch(error) {
+
+
+      console.error(
+        "Application draft generation failed:",
+        error
+      );
+
+
+      return res.status(500).json({
+
+        error:
+          "Failed to generate application draft"
+
+      });
+
+    }
+
+  }
+);
+
+
+
+/**
+ * Queue based application processing
+ */
+
+app.post(
+  "/api/v1/applications/queue",
+  async(req,res)=>{
+
+    try {
+
+
+      const job =
+        await addApplicationJob({
+
+          userId:
+            req.body.userId,
+
+          opportunityId:
+            req.body.opportunityId,
+
+          opportunityTitle:
+            req.body.opportunityTitle,
+
+          organization:
+            req.body.organization,
+
+          profile:
+            req.body.profile,
+
+          action:
+            req.body.action ||
+            "generate_draft"
+
+        });
+
+
+
+      return res.json({
+
+        success:true,
+
+        jobId:
+          job.id
+
+      });
+
+
+    } catch(error){
+
+
+      console.error(
+        "Application queue error:",
+        error
+      );
+
+
+      return res.status(500).json({
+
+        error:
+          "Unable to queue application"
+
+      });
+
+    }
+
+  }
+);
   // Health check
   app.get("/api/v1/health", (req, res) => {
     res.json({ 
