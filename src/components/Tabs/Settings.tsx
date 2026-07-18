@@ -1,9 +1,5 @@
 import React, { useState } from 'react';
-<<<<<<< HEAD
-import { Bell, Lock, UserX, Info, HelpCircle } from 'lucide-react';
-=======
-import { Bell, Lock, UserX, Info, ShieldAlert, Loader2 } from 'lucide-react';
->>>>>>> upstream/main
+import { Bell, Lock, UserX, Info, ShieldAlert, Loader2, HelpCircle } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { NotificationPreferences } from '../../types';
 
