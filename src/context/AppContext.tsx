@@ -321,12 +321,37 @@ const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
     );
 
     try {
+      // 1. Update Firebase (Firestore)
       const userRef = doc(db, 'users', profile.uid);
       if (alreadyBookmarked) {
         await updateDoc(userRef, { bookmarks: arrayRemove(opportunityId) });
       } else {
         await updateDoc(userRef, { bookmarks: arrayUnion(opportunityId) });
       }
+
+      // 2. Update MongoDB Backend
+      const token = await auth.currentUser?.getIdToken();
+      if (token) {
+        const method = alreadyBookmarked ? 'DELETE' : 'POST';
+        const url = alreadyBookmarked 
+          ? `/api/v1/bookmarks/${opportunityId}`
+          : '/api/v1/bookmarks';
+        const body = alreadyBookmarked ? undefined : JSON.stringify({ opportunityId });
+        
+        const response = await fetch(url, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Backend bookmark failed with status ${response.status}`);
+        }
+      }
+
       trackInteraction(opportunityId, alreadyBookmarked ? 'view' : 'save');
     } catch (err) {
       console.error('Bookmark toggle failed, rolling back:', err);
@@ -381,7 +406,10 @@ isBookmarked,
       theme,
       toggleTheme,
       gettingStartedStep,
-      setGettingStartedStep
+      setGettingStartedStep,
+      bookmarkedIds,
+      toggleBookmark,
+      isBookmarked
     }}>
       {children}
     </AppContext.Provider>
