@@ -7,6 +7,7 @@ import { ErrorState } from '../ui/states';
 import ShareModal from '../ui/ShareModal';
 import ApplyAssistModal from '../ui/ApplyAssistModal';
 import { useAppContext } from '../../context/AppContext';
+import { FaqPreview } from '../ui/FaqPreview';
 
 export default function Dashboard() {
   const { user, profile, viewOpportunity: onViewDetails } = useAppContext();
@@ -415,8 +416,13 @@ export default function Dashboard() {
         )}
       </div>
 
+      {/* FAQ Preview */}
+      <div className="mt-12 mb-8">
+        <FaqPreview />
+      </div>
+
       {/* Newsletter Signup */}
-      <div className="mt-12 bg-white border border-[#E2E8F0] rounded-[16px] p-8 text-center shadow-sm relative overflow-hidden mb-8">
+      <div className="bg-white border border-[#E2E8F0] rounded-[16px] p-8 text-center shadow-sm relative overflow-hidden mb-8">
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#2563EB] to-[#4F46E5]"></div>
         <div className="w-16 h-16 bg-[#EFF6FF] rounded-full flex items-center justify-center mx-auto mb-4 border border-[#DBEAFE]">
            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#2563EB]"><path d="M22 17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9.5C2 7 4 5 6.5 5H18c2.2 0 4 1.8 4 4v8Z"></path><polyline points="15,9 18,9 18,11"></polyline><path d="M5.5 19C7.4 19 9 17.4 9 15.5S7.4 12 5.5 12"></path><polyline points="2 5 12 12 22 5"></polyline></svg>
