@@ -25,6 +25,7 @@ import { ExpressAdapter } from '@bull-board/express';
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { scraperQueue } from './src/queues/scraperQueue.js';
+import { generateOpportunityEmbedding } from "./src/services/embedding.js";
 
 dotenv.config();
 
@@ -546,7 +547,7 @@ async function startServer() {
   const PORT = process.env.PORT ? parseInt(process.env.PORT) : 5173;
 
   // Trust reverse proxy (Cloud Run, nginx / Cloudflare reverse proxies)
-  app.set('trust proxy', true);
+  app.set('trust proxy', 1);
 
   const serverAdapter = new ExpressAdapter();
   serverAdapter.setBasePath('/admin/queues');
@@ -803,6 +804,51 @@ async function startServer() {
         items: result.items
       });
     } catch(err) {
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  app.get("/api/v1/opportunities/semantic-search", async (req, res) => {
+    try {
+      const q = req.query.q as string;
+      if (!q) {
+        return res.status(400).json({ error: "Missing query parameter 'q'" });
+      }
+
+      const queryEmbedding = await generateOpportunityEmbedding(q);
+      if (!queryEmbedding) {
+        return res.status(500).json({ error: "Failed to generate embedding for query" });
+      }
+
+      if (!dbQuery) {
+         return res.json({ num_results: 0, items: [] });
+      }
+
+      const pipeline = [
+        {
+          "$vectorSearch": {
+            "index": "vector_index", 
+            "path": "embedding",
+            "queryVector": queryEmbedding,
+            "numCandidates": 100,
+            "limit": 10
+          }
+        },
+        {
+          "$project": {
+            "embedding": 0
+          }
+        }
+      ];
+
+      const items = await dbQuery.collection("opportunities").aggregate(pipeline).toArray();
+
+      res.json({
+        num_results: items.length,
+        items
+      });
+    } catch (err) {
+      console.error("/api/v1/opportunities/semantic-search error:", err);
       res.status(500).json({ error: "Internal Server Error" });
     }
   });
