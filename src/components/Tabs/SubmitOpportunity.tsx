@@ -2,8 +2,11 @@ import React, { useState } from 'react';
 import { Check, Loader2 } from 'lucide-react';
 import { db } from '../../lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { ErrorState } from '../ui/states';
+import { useAppContext } from '../../context/AppContext';
 
-export default function SubmitOpportunity({ user }: { user: any }) {
+export default function SubmitOpportunity() {
+  const { user } = useAppContext();
   const [formData, setFormData] = useState({
     type: 'Internship',
     title: '',
@@ -21,12 +24,14 @@ export default function SubmitOpportunity({ user }: { user: any }) {
   
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.confirmed) return alert("Must confirm legitimacy.");
-    
+    if (!formData.confirmed || loading) return;
+
     setLoading(true);
+    setSubmitError(null);
     try {
       if (!user) throw new Error("Must be logged in to submit.");
       
@@ -55,9 +60,8 @@ export default function SubmitOpportunity({ user }: { user: any }) {
       setFormData({
         type: 'Internship', title: '', org: '', desc: '', year: 'Any', field: 'Any', location: '', link: '', deadline: '', tags: '', email: '', confirmed: false
       });
-    } catch (err: any) {
-      console.error(err);
-      alert(err.message || "Failed to submit opportunity. Ensure you are logged in.");
+    } catch {
+      setSubmitError('Unable to submit the opportunity. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -107,6 +111,8 @@ export default function SubmitOpportunity({ user }: { user: any }) {
         </h2>
         <p className="text-gray-500 font-medium">Contribute verified opportunities to the network.</p>
       </header>
+
+      {submitError ? <ErrorState title="Submission failed" description={submitError} /> : null}
 
       <form onSubmit={handleSubmit} className="clean-card bg-white p-8 space-y-6">
         
@@ -202,7 +208,7 @@ export default function SubmitOpportunity({ user }: { user: any }) {
           </label>
           
           <button type="submit" disabled={!formData.confirmed || loading} className="clean-btn w-full md:w-auto px-10 py-3.5 flex justify-center items-center gap-2 font-bold shadow-md">
-            {loading ? <Loader2 className="animate-spin w-5 h-5" /> : 'Submit Opportunity →'}
+            {loading ? <><Loader2 className="animate-spin w-5 h-5" /> Submitting...</> : 'Submit Opportunity →'}
           </button>
         </div>
 

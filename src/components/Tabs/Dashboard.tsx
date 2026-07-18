@@ -3,23 +3,21 @@ import { Target, Search, Compass, ShieldCheck, Loader2, ArrowRight, RefreshCw, S
 import { io } from 'socket.io-client';
 import { UserProfile } from '../../types';
 import { fetchSmartFeed, fetchExploreFeed, trackInteraction, runScoutProtocolBackend, generateApplyAssistBackend, fetchLatestFeed } from '../../services/apiClient';
+import { ErrorState } from '../ui/states';
 import ShareModal from '../ui/ShareModal';
 import ApplyAssistModal from '../ui/ApplyAssistModal';
+import { useAppContext } from '../../context/AppContext';
 
-interface DashboardProps {
-  user: any;
-  profile: UserProfile | null;
-  onViewDetails?: (id: string, title?: string) => void;
-}
-
-export default function Dashboard({ user, profile, onViewDetails }: DashboardProps) {
+export default function Dashboard() {
+  const { user, profile, viewOpportunity: onViewDetails } = useAppContext();
   const [showScoutModal, setShowScoutModal] = useState(false);
   const [scoutStep, setScoutStep] = useState(1);
   const [scoutData, setScoutData] = useState({ year: '', field: '', tech: '', goal: '' });
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [feedError, setFeedError] = useState<string | null>(null);
   const [feedItems, setFeedItems] = useState<any[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasNextPage, setHasNextPage] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [shareOpp, setShareOpp] = useState<{title: string, link: string} | null>(null);
@@ -66,19 +64,20 @@ export default function Dashboard({ user, profile, onViewDetails }: DashboardPro
     if (isFirstLoad || force) setLoading(true);
     
     try {
+      setFeedError(null);
       const fetchFn = mode === 'smart' 
-        ? () => fetchSmartFeed(profile, 1) 
+        ? () => fetchSmartFeed(profile) 
         : mode === 'daily'
         ? () => fetchLatestFeed()
-        : () => fetchExploreFeed(1);
+        : () => fetchExploreFeed();
       const results = await fetchFn();
       
       setFeedItems(results.items || []);
-      setCurrentPage(1);
-      setHasNextPage(!!results.next_page);
+      setNextCursor(results.next_cursor || null);
+      setHasNextPage(!!results.next_cursor);
       setLastUpdated(Date.now());
-    } catch (e) {
-      console.error(e);
+    } catch {
+      setFeedError('Unable to load your dashboard feed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -88,15 +87,14 @@ export default function Dashboard({ user, profile, onViewDetails }: DashboardPro
     if (loadingMore || !hasNextPage || discoveryMode === 'daily') return;
     setLoadingMore(true);
     try {
-      const nextPage = currentPage + 1;
       const results = discoveryMode === 'smart' 
-        ? await fetchSmartFeed(profile, nextPage) 
-        : await fetchExploreFeed(nextPage);
+        ? await fetchSmartFeed(profile, nextCursor || undefined) 
+        : await fetchExploreFeed(nextCursor || undefined);
       
       if (results.items?.length > 0) {
         setFeedItems(prev => [...prev, ...results.items]);
-        setCurrentPage(nextPage);
-        setHasNextPage(!!results.next_page);
+        setNextCursor(results.next_cursor || null);
+        setHasNextPage(!!results.next_cursor);
       } else {
         setHasNextPage(false);
       }
@@ -252,7 +250,9 @@ export default function Dashboard({ user, profile, onViewDetails }: DashboardPro
           </div>
         </div>
         
-        {loading ? (
+        {feedError && feedItems.length === 0 ? (
+          <ErrorState description={feedError} onRetry={() => void loadInitialFeed(true)} retrying={loading} />
+        ) : loading ? (
           <div className="flex flex-col items-center justify-center py-20 bg-white rounded-[16px] border border-[#E2E8F0]">
             <div className="w-10 h-10 border-4 border-[#2563EB] border-t-transparent rounded-full animate-spin mb-4"></div>
             <p className="text-[#64748B] font-[500] text-[14px]">Discovering more opportunities for you 🚀</p>

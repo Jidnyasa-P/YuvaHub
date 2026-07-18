@@ -1,20 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Calendar, MapPin, Share2, FileText, ChevronRight, Clock, ExternalLink, Zap, CheckCircle, Award, Bookmark } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, FileText, ChevronRight, Clock, ExternalLink, Zap, CheckCircle, Award, Bookmark } from 'lucide-react';
 import { SEO } from '../SEO';
 import { fetchOpportunityById, trackInteraction, generateApplyAssistBackend } from '../../services/apiClient';
 import ShareModal from '../ui/ShareModal';
 import ApplyAssistModal from '../ui/ApplyAssistModal';
 import { doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import ShareCalendarActions from '../ui/ShareCalendarActions';
+import { ErrorState, LoadingState } from '../ui/states';
+import { useAppContext } from '../../context/AppContext';
 
-interface OpportunityDetailProps {
-  id: string;
-  onBack: () => void;
-  profile: any;
-  setProfile?: (p: any) => void;
-}
-
-export default function OpportunityDetail({ id, onBack, profile, setProfile }: OpportunityDetailProps) {
+export default function OpportunityDetail() {
+  const { selectedOppId, clearSelectedOpportunity: onBack, profile, setProfile } = useAppContext();
+  const id = selectedOppId || '';
   const [opp, setOpp] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,26 +55,28 @@ export default function OpportunityDetail({ id, onBack, profile, setProfile }: O
       .replace(/-+$/, '');
   };
 
-  useEffect(() => {
-    async function loadOpp() {
-      setLoading(true);
-      setError(null);
-      try {
-        const item = await fetchOpportunityById(id);
-        if (item) {
-          setOpp(item);
-          trackInteraction(id, 'view');
-        } else {
-          setError("Opportunity not found in our live database.");
-        }
-      } catch (err) {
-        console.error("Failed to load opportunity", err);
-        setError("Unable to connect to service. Try again in 60s.");
-      } finally {
-        setLoading(false);
+  const loadOpp = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const item = await fetchOpportunityById(id);
+      if (item) {
+        setOpp(item);
+        trackInteraction(id, 'view');
+      } else {
+        setOpp(null);
+        setError('This opportunity is unavailable.');
       }
+    } catch {
+      setError('Unable to load this opportunity. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    loadOpp();
+  };
+
+  useEffect(() => {
+    void loadOpp();
   }, [id]);
 
   const handleApplyAssist = async () => {
@@ -101,25 +101,22 @@ export default function OpportunityDetail({ id, onBack, profile, setProfile }: O
   };
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-32 space-y-4">
-        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-sm font-semibold text-gray-600 animate-pulse uppercase tracking-widest">Hydrating opportunity metrics...</p>
-      </div>
-    );
+    return <LoadingState title="Loading opportunity" description="Fetching the latest opportunity details." />;
   }
 
   if (error || !opp) {
     return (
-      <div className="max-w-2xl mx-auto py-16 text-center space-y-6">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 text-red-600">
-          <Calendar className="w-8 h-8" />
+      <div className="max-w-2xl mx-auto py-16 space-y-4">
+        <ErrorState
+          title="Opportunity unavailable"
+          description={error || 'The requested opportunity could not be found.'}
+          onRetry={() => void loadOpp()}
+        />
+        <div className="text-center">
+          <button onClick={onBack} className="inline-flex items-center gap-2 px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-100 transition-colors">
+            <ArrowLeft className="w-4 h-4" /> Go Back
+          </button>
         </div>
-        <h2 className="text-2xl font-bold text-gray-900">Opportunity Verification Failed</h2>
-        <p className="text-sm text-gray-500">{error || "The requested item is offline."}</p>
-        <button onClick={onBack} className="inline-flex items-center gap-2 px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-semibold hover:bg-gray-100 transition-colors">
-          <ArrowLeft className="w-4 h-4" /> Go Back
-        </button>
       </div>
     );
   }
@@ -190,12 +187,25 @@ export default function OpportunityDetail({ id, onBack, profile, setProfile }: O
           >
             <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} /> {isBookmarked ? 'Saved' : 'Save'}
           </button>
-          <button 
-            onClick={() => setShareOpp({ title: opp.title, link: detailUrl })}
-            className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 hover:bg-blue-50 py-1.5 px-3 rounded-md transition-colors border border-gray-200"
-          >
-            <Share2 className="w-4 h-4" /> Share URL
-          </button>
+          <ShareCalendarActions
+  title={opp.title}
+  url={detailUrl}
+  description={
+    opp.description ||
+    'View this opportunity on YuvaHub.'
+  }
+  location={
+    opp.location ||
+    'Remote / Online'
+  }
+  deadline={opp.deadline}
+  onOpenFallback={() =>
+    setShareOpp({
+      title: opp.title,
+      link: detailUrl,
+    })
+  }
+/>
         </div>
       </div>
 

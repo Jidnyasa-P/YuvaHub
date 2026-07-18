@@ -2,6 +2,8 @@ import { execSync } from 'child_process';
 import { MongoClient } from 'mongodb';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
+import { eventBus } from './src/events/eventBus';
+import { EventType, OpportunityScrapedEvent } from './src/events/schemas';
 
 dotenv.config();
 
@@ -22,6 +24,8 @@ async function runVerification() {
   const client = new MongoClient(uri);
   await client.connect();
   const db = client.db(dbName);
+  
+  await eventBus.connect();
   
   const initialCount = await db.collection("opportunities").countDocuments();
   console.log(`[Database] Initial MongoDB Document Count: ${initialCount}`);
@@ -87,47 +91,38 @@ async function runVerification() {
     pythonScrapedCount = mockOpportunities.length;
     console.log(`[Phase 2] Extraction Succeeded. Found ${pythonScrapedCount} opportunities from Node Registry.`);
 
-    // Direct Ingestion of Node Parsed Items into MongoDB
+    // Emit events instead of direct ingestion
     for (const item of mockOpportunities) {
       const fp = crypto.createHash("md5").update(`${item.source_name}:${item.title}:${item.organization}`).digest("hex");
       
-      const doc: any = {
-        title: item.title,
-        description: item.description || "No description provided.",
-        source: item.source_name.toLowerCase().replace(/[^a-z0-9]/g, "_"),
-        source_name: item.source_name,
-        source_url: item.apply_link || "https://yuvahub.xyz",
-        apply_link: item.apply_link || "https://yuvahub.xyz",
-        image_url: "https://yuvahub.xyz/og-image.jpg",
-        tags: Array.isArray(item.tags) ? item.tags : ["Live"],
-        category: item.opportunity_type || "General",
-        deadline: item.deadline || "TBD",
-        location: item.location || "Online",
-        opportunity_type: (item.opportunity_type || "General").toLowerCase(),
-        fingerprint: fp,
-        fingerprint_hash: fp,
-        created_at: new Date(),
-        updated_at: new Date()
+      const event: OpportunityScrapedEvent = {
+        eventId: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        eventType: EventType.enum.OpportunityScraped,
+        payload: {
+          url: item.apply_link || "https://yuvahub.xyz",
+          title: item.title,
+          company: item.organization,
+          description: item.description || "No description provided.",
+          sourceName: item.source_name,
+          tags: Array.isArray(item.tags) ? item.tags : ["Live"],
+          opportunityType: item.opportunity_type || "General",
+          deadline: item.deadline || "TBD",
+          location: item.location || "Online",
+          dedupeHash: fp,
+        }
       };
 
-      const res = await db.collection("opportunities").updateOne(
-        { fingerprint: fp },
-        { $setOnInsert: doc },
-        { upsert: true }
-      );
-
-      if (res.upsertedCount > 0) {
-        pythonInsertedCount++;
-      } else {
-        pythonUpdatedCount++;
-      }
-
+      await eventBus.publish('opportunity.scraped', event);
+      pythonInsertedCount++;
+      
+      // Update metrics
       await db.collection("scraper_metrics").updateOne(
-          { id: doc.source },
+          { id: event.payload.sourceName.toLowerCase().replace(/[^a-z0-9]/g, "_") },
           {
             $set: {
-              id: doc.source,
-              name: doc.source_name,
+              id: event.payload.sourceName.toLowerCase().replace(/[^a-z0-9]/g, "_"),
+              name: event.payload.sourceName,
               status: "healthy",
               lastRun: new Date().toISOString(),
               items: 2,
@@ -145,7 +140,7 @@ async function runVerification() {
           { upsert: true }
         );
     }
-    console.log(`[Phase 2] Node Pipeline Database Ingestion Complete: ${pythonInsertedCount} new inserted, ${pythonUpdatedCount} duplicates cataloged.`);
+    console.log(`[Phase 2] Node Pipeline Event Emission Complete: ${pythonInsertedCount} events published to RabbitMQ.`);
   } catch (err: any) {
     console.error("[Phase 2] Node Pipeline Execution Failed!", err);
   }
@@ -184,6 +179,7 @@ async function runVerification() {
   } catch (err: any) {
     console.error("[Phase 3] Metrics Analysis Failed:", err.message);
   } finally {
+    await eventBus.disconnect();
     await client.close();
     console.log("\n=================================================================");
     console.log("   Yuvahub ingestion run verification process terminated.        ");

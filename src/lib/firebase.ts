@@ -4,8 +4,11 @@ import {
   browserLocalPersistence,
   browserPopupRedirectResolver,
   GoogleAuthProvider, 
+  GithubAuthProvider,
   OAuthProvider, 
-  signInWithPopup, 
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -39,11 +42,48 @@ async function testConnection() {
 testConnection();
 
 export const googleProvider = new GoogleAuthProvider();
+export const githubProvider = new GithubAuthProvider();
 export const appleProvider = new OAuthProvider('apple.com');
 
-export const signInWithGoogle = () => signInWithPopup(auth, googleProvider);
-export const signInWithApple = () => signInWithPopup(auth, appleProvider);
+// Use signInWithPopup first, fall back to signInWithRedirect if domain is unauthorized
+export const signInWithGoogle = async () => {
+  try {
+    return await signInWithPopup(auth, googleProvider);
+  } catch (error: any) {
+    if (error?.code === 'auth/unauthorized-domain' || error?.code === 'auth/popup-blocked') {
+      console.log('Popup auth failed, falling back to redirect...');
+      return signInWithRedirect(auth, googleProvider);
+    }
+    throw error;
+  }
+};
+export const signInWithGithub = async () => {
+  try {
+    return await signInWithPopup(auth, githubProvider);
+  } catch (error: any) {
+    if (error?.code === 'auth/unauthorized-domain' || error?.code === 'auth/popup-blocked') {
+      console.log('Popup auth failed, falling back to redirect...');
+      return signInWithRedirect(auth, githubProvider);
+    }
+    throw error;
+  }
+};
+export const signInWithApple = async () => {
+  try {
+    return await signInWithPopup(auth, appleProvider);
+  } catch (error: any) {
+    if (error?.code === 'auth/unauthorized-domain' || error?.code === 'auth/popup-blocked') {
+      return signInWithRedirect(auth, appleProvider);
+    }
+    throw error;
+  }
+};
 export const logout = () => signOut(auth);
+
+// Handle redirect result when user returns from Google sign-in
+getRedirectResult(auth).catch((error) => {
+  console.warn('Redirect auth result error:', error);
+});
 
 export { 
   createUserWithEmailAndPassword, 

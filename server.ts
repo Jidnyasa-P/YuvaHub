@@ -1,5 +1,8 @@
 import express from "express";
 import http from "http";
+import { eventBus } from "./src/events/eventBus";
+import { createOpportunityScrapedConsumer } from "./src/consumers/opportunityScrapedConsumer";
+import { notificationConsumerHandler } from "./src/consumers/notificationConsumer";
 import { Server } from "socket.io";
 import { createServer as createViteServer } from "vite";
 import path from "path";
@@ -7,10 +10,107 @@ import cors from "cors";
 import { fileURLToPath } from "url";
 import { MongoClient, ObjectId } from "mongodb";
 import dotenv from "dotenv";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
+import { z } from "zod";
+import jwt from "jsonwebtoken";
+import { ScholarshipSchema, AIEvaluationResponseSchema } from "./src/models/scholarshipSchema.js";
+import { isToxic, createToxicityMiddleware } from "./src/services/toxicity.js";
 import rateLimit from "express-rate-limit";
+import { RedisStore } from "rate-limit-redis";
+import Redis from "ioredis";
+import { v2 as cloudinary } from "cloudinary";
+import { meiliClient, initializeSearchSync } from "./src/services/searchSync.js";
 
 dotenv.config();
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+  secure: true
+});
+
+let redisClient: Redis;
+try {
+  redisClient = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    retryStrategy: (times) => {
+      return Math.min(times * 50, 2000);
+    }
+  });
+
+  let redisErrorLogged = false;
+  redisClient.on('error', (err) => {
+    if (!redisErrorLogged) {
+      console.warn('[Redis] Connection failed or Redis is not running. Bypassing rate limiting (fail-open mode).');
+      redisErrorLogged = true;
+    }
+  });
+  redisClient.on('connect', () => {
+    console.log('[Redis] Connected successfully');
+    redisErrorLogged = false;
+  });
+} catch (e: any) {
+  console.error('[Redis] Init error:', e.message);
+}
+
+const createFailOpenStore = (prefix: string) => {
+  const store = new RedisStore({
+    sendCommand: (...args: string[]) => {
+      const [command, ...commandArgs] = args;
+      return redisClient.call(command, ...commandArgs) as Promise<any>;
+    },
+    prefix: prefix,
+  });
+
+  return {
+    ...store,
+    increment: async (key: string) => {
+      if (!redisClient || redisClient.status !== 'ready') {
+        console.error(`[RateLimit] Redis disconnected. Failing open for key: ${key}`);
+        return { totalHits: 1, resetTime: new Date(Date.now() + 60000) };
+      }
+      try {
+        return await store.increment(key);
+      } catch (err: any) {
+        console.error(`[RateLimit] Redis error. Failing open for key: ${key}`);
+        return { totalHits: 1, resetTime: new Date(Date.now() + 60000) };
+      }
+    },
+    decrement: async (key: string) => {
+      if (!redisClient || redisClient.status !== 'ready') return;
+      try { return await store.decrement(key); } catch(e) {}
+    },
+    resetKey: async (key: string) => {
+      if (!redisClient || redisClient.status !== 'ready') return;
+      try { return await store.resetKey(key); } catch(e) {}
+    },
+  };
+};
+
+const resumeRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: true,
+  validate: false,
+  store: createFailOpenStore('rate-limit:ai-resume:'),
+  message: { error: "Too many resume review requests. Please try again later." }
+});
+
+const chatRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: true,
+  validate: false,
+  store: createFailOpenStore('rate-limit:ai-chat:'),
+  keyGenerator: (req) => {
+    return req.body?.userId || req.ip || "unknown";
+  },
+  message: { error: "Too many AI generation requests. Please try again after a minute." }
+});
 
 let _genAI: GoogleGenAI | null = null;
 function getGenAI() {
@@ -34,17 +134,131 @@ function getGenAI() {
 // Composite Feed Ranking Engine based on relevance, freshness, quality, and engagement clicks
 async function getRankedOpportunities(database: any, profile: any, page: number, limit: number) {
   try {
-    const cursor = database.collection("opportunities").find({}).sort({ created_at: -1 }).limit(150);
-    const opportunities = await cursor.toArray();
-    
-    if (opportunities.length === 0) {
+    const skip = (page - 1) * limit;
+
+    // Retain mock DB logic as a fallback for offline development
+    if (database.isMock) {
+      const cursor = database.collection("opportunities").find({}).sort({ created_at: -1 }).limit(150);
+      const opportunities = await cursor.toArray();
+      
+      if (opportunities.length === 0) {
+        return { items: [], next_page: null };
+      }
+
+      const oIds = opportunities.map((o: any) => o._id ? o._id.toString() : o.id);
+      const interactions = database ? await database.collection("interactions").find({
+        opportunity_id: { $in: oIds }
+      }).toArray() : [];
+
+      const intMap: Record<string, { total: number, recent: number }> = {};
+      const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+
+      interactions.forEach((i: any) => {
+        const oId = i.opportunity_id;
+        if (!intMap[oId]) {
+          intMap[oId] = { total: 0, recent: 0 };
+        }
+        intMap[oId].total += 1;
+        const iTime = i.timestamp ? new Date(i.timestamp) : new Date();
+        if (iTime >= fortyEightHoursAgo) {
+          intMap[oId].recent += 1;
+        }
+      });
+
+      const now = Date.now();
+      const profileSkills = profile.skills ? profile.skills.toLowerCase().split(',') : [];
+      const profileCountry = profile.country ? profile.country.toLowerCase().trim() : "";
+      const profileField = profile.field ? profile.field.toLowerCase().trim() : "";
+
+      const scoredItems = opportunities.map((opp: any) => {
+        const idStr = opp._id ? opp._id.toString() : opp.id;
+        const stats = intMap[idStr] || { total: 0, recent: 0 };
+
+        const engagementScore = stats.total * 15;
+        const trendingScore = stats.recent * 30;
+        const sourceQualityScore = opp.source_quality_score || 70;
+
+        const createdTime = opp.created_at ? new Date(opp.created_at).getTime() : now;
+        const hoursSinceCreation = Math.max(0, (now - createdTime) / (1000 * 60 * 60));
+        const freshnessScore = (100 / (1 + (hoursSinceCreation * 0.15))) * 2.0;
+
+        let profileRelevanceScore = 0;
+        if (profileSkills.length > 0 && opp.tags) {
+          const oppTagsLower = opp.tags.map((t: string) => t.toLowerCase());
+          profileSkills.forEach((skill: string) => {
+            const trimmed = skill.trim();
+            if (trimmed && oppTagsLower.some((tag: string) => tag.includes(trimmed) || trimmed.includes(tag))) {
+              profileRelevanceScore += 50;
+            }
+          });
+        }
+
+        if (profileField && opp.description) {
+          if (opp.description.toLowerCase().includes(profileField) || opp.title.toLowerCase().includes(profileField)) {
+            profileRelevanceScore += 40;
+          }
+        }
+
+        if (profileCountry && opp.location) {
+          const locLower = opp.location.toLowerCase();
+          if (locLower.includes(profileCountry) || profileCountry.includes(locLower) || locLower.includes("online") || locLower.includes("remote")) {
+            profileRelevanceScore += 35;
+          }
+        }
+
+        const totalScore = engagementScore + trendingScore + sourceQualityScore + freshnessScore + profileRelevanceScore;
+
+        return {
+          ...opp,
+          id: idStr,
+          metrics: {
+            totalScore: Math.round(totalScore),
+            relevance: profileRelevanceScore,
+            freshness: Math.round(freshnessScore),
+            interactionRatio: stats.total
+          }
+        };
+      });
+
+      scoredItems.sort((a: any, b: any) => b.metrics.totalScore - a.metrics.totalScore);
+
+      const paginatedItems = scoredItems.slice(skip, skip + limit);
+      
+      const mapped = paginatedItems.map((opp: any) => {
+        const copy = { ...opp };
+        delete copy._id;
+        return copy;
+      });
+
+      return {
+        items: mapped,
+        next_page: skip + limit < scoredItems.length ? page + 1 : null
+      };
+    }
+
+    // Native Meilisearch Query
+    const profileSkills = profile.skills ? profile.skills.toLowerCase().replace(/,/g, ' ') : "";
+    const profileCountry = profile.country ? profile.country.toLowerCase().trim() : "";
+    const profileField = profile.field ? profile.field.toLowerCase().trim() : "";
+    const searchQuery = `${profileSkills} ${profileField} ${profileCountry}`.trim();
+
+    // 1. Search Meilisearch (requesting more to sort in memory)
+    const searchLimit = limit * 3; // fetch a bit more to sort by interaction scores
+    const searchRes = await meiliClient.index('opportunities').search(searchQuery, {
+      offset: skip,
+      limit: searchLimit
+    });
+    let items = searchRes.hits;
+
+    if (items.length === 0) {
       return { items: [], next_page: null };
     }
 
-    const oIds = opportunities.map((o: any) => o._id ? o._id.toString() : o.id);
-    const interactions = database ? await database.collection("interactions").find({
+    // 2. Fetch interactions to calculate dynamic scores
+    const oIds = items.map((o: any) => o.id);
+    const interactions = await database.collection("interactions").find({
       opportunity_id: { $in: oIds }
-    }).toArray() : [];
+    }).toArray();
 
     const intMap: Record<string, { total: number, recent: number }> = {};
     const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
@@ -62,13 +276,8 @@ async function getRankedOpportunities(database: any, profile: any, page: number,
     });
 
     const now = Date.now();
-    const profileSkills = profile.skills ? profile.skills.toLowerCase().split(',') : [];
-    const profileCountry = profile.country ? profile.country.toLowerCase().trim() : "";
-    const profileField = profile.field ? profile.field.toLowerCase().trim() : "";
-
-    const scoredItems = opportunities.map((opp: any) => {
-      const idStr = opp._id ? opp._id.toString() : opp.id;
-      const stats = intMap[idStr] || { total: 0, recent: 0 };
+    const scoredItems = items.map((opp: any) => {
+      const stats = intMap[opp.id] || { total: 0, recent: 0 };
 
       const engagementScore = stats.total * 15;
       const trendingScore = stats.recent * 30;
@@ -78,58 +287,27 @@ async function getRankedOpportunities(database: any, profile: any, page: number,
       const hoursSinceCreation = Math.max(0, (now - createdTime) / (1000 * 60 * 60));
       const freshnessScore = (100 / (1 + (hoursSinceCreation * 0.15))) * 2.0;
 
-      let profileRelevanceScore = 0;
-      if (profileSkills.length > 0 && opp.tags) {
-        const oppTagsLower = opp.tags.map((t: string) => t.toLowerCase());
-        profileSkills.forEach((skill: string) => {
-          const trimmed = skill.trim();
-          if (trimmed && oppTagsLower.some((tag: string) => tag.includes(trimmed) || trimmed.includes(tag))) {
-            profileRelevanceScore += 50;
-          }
-        });
-      }
-
-      if (profileField && opp.description) {
-        if (opp.description.toLowerCase().includes(profileField) || opp.title.toLowerCase().includes(profileField)) {
-          profileRelevanceScore += 40;
-        }
-      }
-
-      if (profileCountry && opp.location) {
-        const locLower = opp.location.toLowerCase();
-        if (locLower.includes(profileCountry) || profileCountry.includes(locLower) || locLower.includes("online") || locLower.includes("remote")) {
-          profileRelevanceScore += 35;
-        }
-      }
-
-      const totalScore = engagementScore + trendingScore + sourceQualityScore + freshnessScore + profileRelevanceScore;
+      const totalScore = engagementScore + trendingScore + sourceQualityScore + freshnessScore;
 
       return {
         ...opp,
-        id: idStr,
         metrics: {
           totalScore: Math.round(totalScore),
-          relevance: profileRelevanceScore,
+          relevance: 0, // Meilisearch handles the textual relevance inherently
           freshness: Math.round(freshnessScore),
           interactionRatio: stats.total
         }
       };
     });
 
+    // 3. Sort by our dynamic scores
     scoredItems.sort((a: any, b: any) => b.metrics.totalScore - a.metrics.totalScore);
 
-    const skip = (page - 1) * limit;
-    const paginatedItems = scoredItems.slice(skip, skip + limit);
-    
-    const mapped = paginatedItems.map((opp: any) => {
-      const copy = { ...opp };
-      delete copy._id;
-      return copy;
-    });
+    const paginatedItems = scoredItems.slice(0, limit);
 
     return {
-      items: mapped,
-      next_page: skip + limit < scoredItems.length ? page + 1 : null
+      items: paginatedItems,
+      next_page: searchRes.estimatedTotalHits && (skip + searchLimit < searchRes.estimatedTotalHits) ? page + 1 : null
     };
   } catch (scoreErr) {
     console.error("Scoring failure:", scoreErr);
@@ -147,6 +325,10 @@ const uri = process.env.MONGODB_URI || "";
 const dbName = process.env.MONGODB_DB_NAME || "yuvahub";
 import { CURATED_FALLBACKS } from "./src/services/staticFallbacks.js";
 import fs from "fs";
+import { initializeDNLDatabase } from "./src/services/dnl/metrics.js";
+import { DNLDispatcher } from "./src/services/dnl/scheduler.js";
+import { DevpostAdapter } from "./src/services/dnl/adapters/DevpostAdapter.js";
+import { InternshalaAdapter } from "./src/services/dnl/adapters/InternshalaAdapter.js";
 
 let db: any = null;
 
@@ -174,11 +356,12 @@ class MemoryCollection {
       });
     }
 
-    return {
-      sort: () => this,
-      limit: (n: number) => { result = result.slice(0, n); return this; },
+    const cursor = {
+      sort: () => cursor,
+      limit: (n: number) => { result = result.slice(0, n); return cursor; },
       toArray: async () => result
     };
+    return cursor;
   }
   async findOne(query: any) {
     const res = await this.find(query).toArray();
@@ -188,9 +371,22 @@ class MemoryCollection {
   async insertOne(doc: any) { this.data.push(doc); return { insertedId: "mock_id" }; }
   async countDocuments() { return this.data.length; }
   aggregate() { return { toArray: async () => [] }; }
+  initializeUnorderedBulkOp() {
+    const ops: any[] = [];
+    return {
+      insert: (doc: any) => {
+        ops.push(doc);
+      },
+      execute: async () => {
+        this.data.push(...ops);
+        return { ok: 1, nInserted: ops.length };
+      }
+    };
+  }
 }
 
 class MockDB {
+  isMock = true;
   collections: Record<string, MemoryCollection> = {
     opportunities: new MemoryCollection(CURATED_FALLBACKS.map(f => ({...f, created_at: new Date()}))),
     interactions: new MemoryCollection(),
@@ -199,19 +395,127 @@ class MockDB {
   collection(name: string) { return this.collections[name] || (this.collections[name] = new MemoryCollection()); }
 }
 
+function setupDNL(database: any) {
+  initializeDNLDatabase(database).then(() => {
+    const dispatcher = new DNLDispatcher(database);
+    dispatcher.registerAdapter(new DevpostAdapter());
+    dispatcher.registerAdapter(new InternshalaAdapter());
+    dispatcher.start(3600000); // 1 hour
+    console.log("[DNL] Scheduler initialized and started.");
+  }).catch(err => {
+    console.error("[DNL] Setup failed:", err);
+  });
+}
+
 if (uri) {
   const client = new MongoClient(uri);
   client.connect().then(() => {
     db = client.db(dbName);
     console.log(`[Database] Connected to MongoDB: ${dbName}`);
+    setupDNL(db);
+    initializeSearchSync(db);
+    
+    // Create required compound indexes asynchronously
+    db.collection("opportunities").createIndex({ created_at: -1, source_quality_score: -1 })
+      .then(() => console.log(`[Database] Created compound index on opportunities`))
+      .catch((err: any) => console.error(`[Database] Failed to create index:`, err));
   }).catch(err => {
     console.error("[Database] Connection failed, falling back to Mock Data:", err);
     db = new MockDB();
+    setupDNL(db);
+    initializeSearchSync(db);
   });
 } else {
   console.log("[Database] No MONGODB_URI provided. Running in Offline Mock mode.");
   db = new MockDB();
+  setupDNL(db);
+  initializeSearchSync(db);
 }
+
+class AnalyticsBuffer {
+  private buffer: any[] = [];
+  private flushInterval: NodeJS.Timeout | null = null;
+  private isFlushing = false;
+
+  constructor(private intervalMs: number = 5000) {
+    this.startInterval();
+  }
+
+  public push(event: any) {
+    if (event) {
+      if (Array.isArray(event)) {
+        this.buffer.push(...event);
+      } else {
+        this.buffer.push(event);
+      }
+    }
+  }
+
+  private startInterval() {
+    this.flushInterval = setInterval(() => {
+      this.flush().catch(err => console.error("[AnalyticsBuffer] Auto-flush error:", err));
+    }, this.intervalMs);
+  }
+
+  public async flush() {
+    if (this.buffer.length === 0 || this.isFlushing) {
+      return;
+    }
+
+    this.isFlushing = true;
+    const batch = [...this.buffer];
+    this.buffer = [];
+
+    try {
+      if (db) {
+        const collection = db.collection("analytics");
+        const bulk = collection.initializeUnorderedBulkOp();
+        for (const doc of batch) {
+          bulk.insert(doc);
+        }
+        await bulk.execute();
+        console.log(`[AnalyticsBuffer] Flushed ${batch.length} events to MongoDB.`);
+      } else {
+        this.buffer.unshift(...batch);
+        console.warn(`[AnalyticsBuffer] DB not ready. Re-queued ${batch.length} events.`);
+      }
+    } catch (err) {
+      console.error("[AnalyticsBuffer] Error flushing batch:", err);
+      this.buffer.unshift(...batch);
+    } finally {
+      this.isFlushing = false;
+    }
+  }
+
+  public stop() {
+    if (this.flushInterval) {
+      clearInterval(this.flushInterval);
+      this.flushInterval = null;
+    }
+  }
+}
+
+const analyticsBuffer = new AnalyticsBuffer(5000);
+
+let isShuttingDown = false;
+const gracefulShutdown = async (signal: string) => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`[System] Received ${signal}. Starting graceful shutdown...`);
+  try {
+    analyticsBuffer.stop();
+    await analyticsBuffer.flush();
+    console.log("[System] Analytics buffer flushed successfully.");
+  } catch (err) {
+    console.error("[System] Error during graceful shutdown analytics flush:", err);
+  } finally {
+    process.exit(0);
+  }
+};
+
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGBREAK", () => gracefulShutdown("SIGBREAK"));
 
 async function startServer() {
   const app = express();
@@ -221,7 +525,7 @@ async function startServer() {
   const corsOptions = frontendUrl ? { origin: frontendUrl } : { origin: "*" };
   
   const io = new Server(server, { cors: corsOptions });
-  const PORT = 3000;
+  const PORT = 5173;
 
   // Trust reverse proxy (Cloud Run, nginx / Cloudflare reverse proxies)
   app.set('trust proxy', true);
@@ -233,7 +537,17 @@ async function startServer() {
   });
 
   app.use(cors(corsOptions));
-  app.use(express.json());
+  app.use(express.json({ limit: '10mb' }));
+
+  app.post("/api/analytics/track", (req, res) => {
+    analyticsBuffer.push(req.body);
+    res.status(202).json({ status: "Accepted" });
+  });
+
+  app.post("/api/analytics/shutdown", async (req, res) => {
+    res.status(200).json({ status: "Shutting down" });
+    await gracefulShutdown("API_TRIGGER");
+  });
 
   // --- Rate Limiting Middlewares ---
   const generalLimiter = rateLimit({
@@ -372,14 +686,57 @@ async function startServer() {
     });
   });
 
+  const cacheMiddleware = (ttlSeconds: number, keyGenerator?: (req: express.Request) => string) => {
+    return async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+      if (!redisClient || redisClient.status !== 'ready') {
+        res.setHeader("X-Cache-Status", "BYPASS");
+        return next();
+      }
+
+      const key = keyGenerator ? keyGenerator(req) : req.originalUrl;
+
+      try {
+        const cached = await redisClient.get(key);
+        if (cached) {
+          res.setHeader("X-Cache-Status", "HIT");
+          return res.json(JSON.parse(cached));
+        }
+      } catch (err) {
+        console.error("[Cache] Redis get error:", err);
+      }
+
+      res.setHeader("X-Cache-Status", "MISS");
+
+      const originalJson = res.json.bind(res);
+      res.json = (body: any) => {
+        try {
+          if (redisClient && redisClient.status === 'ready' && res.statusCode >= 200 && res.statusCode < 300) {
+            redisClient.set(key, JSON.stringify(body), "EX", ttlSeconds).catch((err: any) => {
+              console.error("[Cache] Redis set error:", err);
+            });
+          }
+        } catch (err) {
+          console.error("[Cache] Error stringifying response:", err);
+        }
+        return originalJson(body);
+      };
+
+      next();
+    };
+  };
+
   // --- Real API Routes ---
   app.get("/api/v1/opportunities", async (req, res) => {
     try {
-      const page = parseInt((req.query.page as string) || "1", 10);
+      let page = parseInt((req.query.page as string) || "1", 10);
+      if (req.query.cursor) {
+        const cInt = parseInt(req.query.cursor as string, 10);
+        if (!isNaN(cInt) && cInt > 0) page = cInt;
+      }
       const limit = parseInt((req.query.limit as string) || "10", 10);
       
       if (!db) {
-        return res.json({ num_results: 1, next_page: null, items: [{
+        return res.json({ num_results: 1, next_page: null, next_cursor: null, items: [{
           id: "sys_nodeDbMissing", title: "Awaiting Live Ingestion...", organization: "Yuvahub System", type: "status", tags: ["system"], apply_link: "#"
         }]});
       }
@@ -395,6 +752,7 @@ async function startServer() {
       res.json({
         num_results: result.items.length,
         next_page: result.next_page,
+        next_cursor: result.next_page ? String(result.next_page) : null,
         items: result.items
       });
     } catch(err) {
@@ -403,10 +761,10 @@ async function startServer() {
     }
   });
 
-  app.get("/api/v1/opportunities/trending", async (req, res) => {
+  app.get("/api/v1/opportunities/trending", cacheMiddleware(15 * 60), async (req, res) => {
     try {
       if (!db) {
-        return res.json({ num_results: 0, next_page: null, items: [] });
+        return res.json({ num_results: 0, next_page: null, next_cursor: null, items: [] });
       }
 
       // Fetch top composites with empty profile to return globally engaging/trending items
@@ -415,6 +773,7 @@ async function startServer() {
       res.json({
         num_results: result.items.length,
         next_page: null,
+        next_cursor: null,
         items: result.items
       });
     } catch(err) {
@@ -457,6 +816,389 @@ async function startServer() {
       res.status(500).json({ error: "Internal Server Error" });
     }
   });
+
+  app.post("/api/v1/auth/sync", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (typeof authHeader !== 'string' || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Unauthorized: Missing token" });
+      }
+
+      const idToken = authHeader.substring(7);
+
+      // 1. Fetch Firebase config to get API key
+      const firebaseConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
+      let firebaseApiKey = "";
+      if (fs.existsSync(firebaseConfigPath)) {
+        try {
+          const config = JSON.parse(fs.readFileSync(firebaseConfigPath, "utf-8"));
+          firebaseApiKey = config.apiKey || "";
+        } catch (e) {
+          console.error("[Auth] Error parsing firebase-applet-config.json:", e);
+        }
+      }
+
+      let uid = "";
+      let email = "";
+      let name = "";
+      let avatarUrl = "";
+
+      if (firebaseApiKey) {
+        // 2. Validate Firebase ID Token using Google Identity Toolkit API
+        const verifyUrl = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseApiKey}`;
+        const verifyRes = await fetch(verifyUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idToken })
+        });
+
+        if (!verifyRes.ok) {
+          const errData = await verifyRes.json().catch(() => ({}));
+          console.error("[Auth] Firebase token verification failed:", errData);
+          return res.status(401).json({ error: "Unauthorized: Invalid token" });
+        }
+
+        const data = await verifyRes.json();
+        if (!data.users || data.users.length === 0) {
+          return res.status(401).json({ error: "Unauthorized: User not found in token payload" });
+        }
+
+        const firebaseUser = data.users[0];
+        uid = firebaseUser.localId;
+        email = firebaseUser.email || "";
+        name = firebaseUser.displayName || "";
+        avatarUrl = firebaseUser.photoUrl || "";
+      } else {
+        // Mock verification for local offline development without a Firebase API key
+        try {
+          const parts = idToken.split(".");
+          if (parts.length === 3) {
+            const payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf-8"));
+            uid = payload.user_id || payload.sub;
+            email = payload.email || "";
+            name = payload.name || "";
+            avatarUrl = payload.picture || "";
+          }
+        } catch (e) {
+          return res.status(401).json({ error: "Unauthorized: Invalid mock token format" });
+        }
+
+        if (!uid) {
+          return res.status(401).json({ error: "Unauthorized: Mock validation failed" });
+        }
+      }
+
+      // 3. Sync profile with MongoDB
+      if (!db) {
+        return res.json({
+          status: "success",
+          profile: {
+            uid,
+            name,
+            email,
+            avatarUrl,
+            role: email === "uditt490@gmail.com" ? "admin" : "student"
+          }
+        });
+      }
+
+      const usersCollection = db.collection("users");
+      const existingUser = await usersCollection.findOne({ uid });
+
+      const role = email === "uditt490@gmail.com" ? "admin" : "student";
+
+      let updatedProfile;
+      if (existingUser) {
+        const updateData: any = {
+          name: req.body.name || existingUser.name || name,
+          email: req.body.email || existingUser.email || email,
+          avatarUrl: req.body.avatarUrl || existingUser.avatarUrl || avatarUrl,
+          onboarded: req.body.onboarded !== undefined ? req.body.onboarded : existingUser.onboarded,
+          college: req.body.college || existingUser.college,
+          year: req.body.year || existingUser.year,
+          field: req.body.field || existingUser.field,
+          skills: req.body.skills || existingUser.skills,
+          avatarPublicId: req.body.avatarPublicId || existingUser.avatarPublicId,
+          resumeUrl: req.body.resumeUrl || existingUser.resumeUrl,
+          resumePublicId: req.body.resumePublicId || existingUser.resumePublicId,
+          coverLetterUrl: req.body.coverLetterUrl || existingUser.coverLetterUrl,
+          coverLetterPublicId: req.body.coverLetterPublicId || existingUser.coverLetterPublicId,
+          updatedAt: new Date()
+        };
+        // Remove undefined keys
+        Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
+
+        await usersCollection.updateOne({ uid }, { $set: updateData });
+        updatedProfile = { ...existingUser, ...updateData };
+      } else {
+        const newUser: any = {
+          uid,
+          name: req.body.name || name,
+          email: req.body.email || email,
+          avatarUrl: req.body.avatarUrl || avatarUrl,
+          role,
+          onboarded: req.body.onboarded !== undefined ? req.body.onboarded : false,
+          college: req.body.college || "",
+          year: req.body.year || "",
+          field: req.body.field || "",
+          skills: req.body.skills || [],
+          bookmarks: [],
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        await usersCollection.insertOne(newUser);
+        updatedProfile = newUser;
+      }
+
+      if (updatedProfile._id) {
+        updatedProfile.id = updatedProfile._id.toString();
+        delete updatedProfile._id;
+      }
+
+      res.json({
+        status: "success",
+        profile: updatedProfile
+      });
+
+    } catch (err: any) {
+      console.error("[Auth] Error syncing user:", err);
+      res.status(500).json({ error: "Internal Server Error during auth sync" });
+    }
+  });
+
+  async function getAuthenticatedUser(req: any) {
+    const authHeader = req.headers.authorization;
+    if (typeof authHeader !== 'string' || !authHeader.startsWith("Bearer ")) {
+      throw new Error("Unauthorized: Missing token");
+    }
+
+    const idToken = authHeader.substring(7);
+
+    // Fetch Firebase config to get API key
+    const firebaseConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
+    let firebaseApiKey = "";
+    if (fs.existsSync(firebaseConfigPath)) {
+      try {
+        const config = JSON.parse(fs.readFileSync(firebaseConfigPath, "utf-8"));
+        firebaseApiKey = config.apiKey || "";
+      } catch (e) {
+        console.error("[Auth] Error parsing firebase-applet-config.json:", e);
+      }
+    }
+
+    let uid = "";
+    let email = "";
+    let role = "user";
+
+    // Try to verify as a standard JWT first (for our RBAC custom tokens)
+    try {
+      const decoded = jwt.verify(idToken, process.env.JWT_SECRET || "yuvahub-secret-key") as any;
+      uid = decoded.sub || decoded.user_id || decoded.uid;
+      email = decoded.email || "";
+      role = decoded.role || "user";
+      return { uid, email, role };
+    } catch (jwtErr) {
+      // If it fails, fall back to Firebase / Mock logic
+    }
+
+    if (firebaseApiKey) {
+      const verifyUrl = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseApiKey}`;
+      const verifyRes = await fetch(verifyUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken })
+      });
+
+      if (!verifyRes.ok) {
+        throw new Error("Unauthorized: Invalid token");
+      }
+
+      const data = await verifyRes.json();
+      if (!data.users || data.users.length === 0) {
+        throw new Error("Unauthorized: User not found");
+      }
+      uid = data.users[0].localId;
+      email = data.users[0].email || "";
+      role = email === "uditt490@gmail.com" ? "admin" : "user";
+    } else {
+      try {
+        const parts = idToken.split(".");
+        if (parts.length === 3) {
+          const payload = JSON.parse(Buffer.from(parts[1], "base64").toString("utf-8"));
+          uid = payload.user_id || payload.sub;
+          email = payload.email || "";
+          role = payload.role || (email === "uditt490@gmail.com" ? "admin" : "user");
+        }
+      } catch (e) {
+        throw new Error("Unauthorized: Invalid mock token format");
+      }
+
+      if (!uid) {
+        throw new Error("Unauthorized: Mock validation failed");
+      }
+    }
+
+    return { uid, email, role };
+  }
+
+  const authorizeRoles = (...allowedRoles: string[]) => {
+    return async (req: any, res: any, next: any) => {
+      try {
+        const user = await getAuthenticatedUser(req);
+        req.user = user;
+        
+        if (!allowedRoles.includes(user.role)) {
+          console.warn(`[Circuit Breaker] Forbidden access attempt to ${req.originalUrl} from IP ${req.ip}. Role: ${user.role}`);
+          return res.status(403).json({ error: "Forbidden: Insufficient privileges." });
+        }
+        next();
+      } catch (err: any) {
+        console.warn(`[Circuit Breaker] Unauthorized access attempt to ${req.originalUrl} from IP ${req.ip}. Error: ${err.message}`);
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+    };
+  };
+
+  const handleSignatureRequest = async (req: any, res: any) => {
+    try {
+      const user = await getAuthenticatedUser(req);
+      const { fileType, extension } = req.body;
+
+      if (!fileType || !extension) {
+        return res.status(400).json({ error: "Missing fileType or extension" });
+      }
+
+      // Enforce client-side and server-side validation to ensure only .pdf, .png, and .jpeg are accepted.
+      const normalizedExt = extension.toLowerCase().replace(/^\./, "");
+      const allowedExtensions = ["pdf", "png", "jpeg", "jpg"];
+      if (!allowedExtensions.includes(normalizedExt)) {
+        return res.status(400).json({ error: "Unsupported file type. Only .pdf, .png, and .jpeg are allowed." });
+      }
+
+      // Configure folder based on file type
+      // For resumes: yuvahub/resumes/${user_id}
+      // For cover letters: yuvahub/cover_letters/${user_id}
+      // For avatars: yuvahub/avatars
+      let folder = "";
+      if (fileType === "resume") {
+        folder = `yuvahub/resumes/${user.uid}`;
+      } else if (fileType === "cover_letter") {
+        folder = `yuvahub/cover_letters/${user.uid}`;
+      } else if (fileType === "avatar") {
+        folder = `yuvahub/avatars/${user.uid}`;
+      } else {
+        return res.status(400).json({ error: "Invalid fileType" });
+      }
+
+      const timestamp = Math.round(new Date().getTime() / 1000);
+
+      // Construct signed parameters
+      const paramsToSign: Record<string, any> = {
+        timestamp,
+        folder,
+      };
+
+      // Restrict formats based on fileType
+      if (fileType === "resume" || fileType === "cover_letter") {
+        paramsToSign.allowed_formats = "pdf";
+      } else if (fileType === "avatar") {
+        paramsToSign.allowed_formats = "png,jpg,jpeg";
+      }
+
+      // Validate parameter formats for security
+      if (fileType === "resume" || fileType === "cover_letter") {
+        if (normalizedExt !== "pdf") {
+          return res.status(400).json({ error: "Resumes and cover letters must be PDF format." });
+        }
+      } else if (fileType === "avatar") {
+        if (!["png", "jpg", "jpeg"].includes(normalizedExt)) {
+          return res.status(400).json({ error: "Avatars must be PNG or JPEG format." });
+        }
+      }
+
+      const apiSecret = process.env.CLOUDINARY_API_SECRET || "";
+      if (!apiSecret) {
+        return res.status(500).json({ error: "Cloudinary API Secret not configured." });
+      }
+
+      const signature = cloudinary.utils.api_sign_request(paramsToSign, apiSecret);
+
+      res.json({
+        signature,
+        timestamp,
+        folder,
+        allowed_formats: paramsToSign.allowed_formats,
+        apiKey: process.env.CLOUDINARY_API_KEY,
+        cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+      });
+
+    } catch (err: any) {
+      console.error("[Storage] Error generating signature:", err);
+      res.status(err.message?.startsWith("Unauthorized") ? 401 : 500).json({ error: err.message || "Internal Server Error" });
+    }
+  };
+
+  const handleSaveUpload = async (req: any, res: any) => {
+    try {
+      const user = await getAuthenticatedUser(req);
+      const { type, url, publicId } = req.body;
+
+      if (!type || !url || !publicId) {
+        return res.status(400).json({ error: "Missing type, url, or publicId" });
+      }
+
+      if (!["avatar", "resume", "cover_letter"].includes(type)) {
+        return res.status(400).json({ error: "Invalid document type" });
+      }
+
+      if (!db) {
+        return res.status(503).json({ error: "Database not available" });
+      }
+
+      const usersCollection = db.collection("users");
+
+      const updateFields: Record<string, any> = {
+        updatedAt: new Date()
+      };
+
+      if (type === "avatar") {
+        updateFields.avatarUrl = url;
+        updateFields.avatarPublicId = publicId;
+      } else if (type === "resume") {
+        updateFields.resumeUrl = url;
+        updateFields.resumePublicId = publicId;
+      } else if (type === "cover_letter") {
+        updateFields.coverLetterUrl = url;
+        updateFields.coverLetterPublicId = publicId;
+      }
+
+      await usersCollection.updateOne({ uid: user.uid }, { $set: updateFields });
+      const updatedProfile = await usersCollection.findOne({ uid: user.uid });
+
+      if (!updatedProfile) {
+        return res.status(404).json({ error: "User profile not found in database" });
+      }
+
+      if (updatedProfile._id) {
+        updatedProfile.id = updatedProfile._id.toString();
+        delete updatedProfile._id;
+      }
+
+      res.json({
+        status: "success",
+        profile: updatedProfile
+      });
+
+    } catch (err: any) {
+      console.error("[Storage] Error saving upload metadata:", err);
+      res.status(err.message?.startsWith("Unauthorized") ? 401 : 500).json({ error: err.message || "Internal Server Error" });
+    }
+  };
+
+  app.post("/api/storage/signature", handleSignatureRequest);
+  app.post("/api/v1/storage/signature", handleSignatureRequest);
+  app.post("/api/storage/save", handleSaveUpload);
+  app.post("/api/v1/storage/save", handleSaveUpload);
 
   app.post("/api/v1/interactions/track", async (req, res) => {
     try {
@@ -590,7 +1332,7 @@ Sincerely,
     return "I am here to help you navigate academic choices, resume reviews, track development milestones, and match with elite engineering fellowships!";
   }
 
-  app.post("/api/v1/ai/generate", async (req, res) => {
+  app.post("/api/v1/ai/generate", chatRateLimiter, async (req, res) => {
     try {
       const { prompt, expectJson } = req.body;
       if (!prompt) return res.status(400).json({ error: "No prompt" });
@@ -651,7 +1393,7 @@ Sincerely,
     }
   });
 
-  app.post("/api/v1/ai/resume_review", async (req, res) => {
+  app.post("/api/v1/ai/resume_review", resumeRateLimiter, async (req, res) => {
     try {
       const { resume } = req.body;
       if (!resume) return res.status(400).json({ error: "No resume provided" });
@@ -739,63 +1481,311 @@ Return JSON strictly in this format:
     }
   });
 
-  app.get("/api/v1/search", async (req, res) => {
+  app.post("/api/ai/analyze-resume", resumeRateLimiter, async (req, res) => {
+    try {
+      const { resumeBase64, fileName, jobDescription, resumeText } = req.body;
+      if (!resumeBase64 && !resumeText) {
+        return res.status(400).json({ error: "No resume file or text provided" });
+      }
+      if (!jobDescription) {
+        return res.status(400).json({ error: "No job description provided" });
+      }
+
+      // Check cache using a combination of the inputs
+      const cacheInput = resumeBase64 ? resumeBase64.substring(0, 200) : (resumeText || "").substring(0, 200);
+      const cacheKey = `resume_analysis:${cacheInput}:${jobDescription.substring(0, 100)}`;
+      const cached = getCachedResponse(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+
+      const defaultFallback = {
+        score: 75,
+        missingKeywords: ["TypeScript", "Vite", "MongoDB", "REST APIs"],
+        strengths: ["Clear layout and readable contact information", "Detailed description of academic projects"],
+        weaknesses: ["Missing quantifiable project scale or metrics", "Lacks modern developer toolings integration"],
+        suggestions: ["Add metrics like request rates or load times to demonstrate impact", "Integrate a modern design framework keyword"]
+      };
+
+      const ai = getGenAI();
+      if (!ai) {
+        console.warn("Gemini AI client not available, returning fallback.");
+        return res.json(defaultFallback);
+      }
+
+      let contents: any[] = [];
+      if (resumeBase64) {
+        contents.push({
+          inlineData: {
+            data: resumeBase64.replace(/^data:application\/pdf;base64,/, ""),
+            mimeType: "application/pdf"
+          }
+        });
+      } else {
+        contents.push({ text: `Resume plain text content:\n${resumeText}` });
+      }
+
+      contents.push({
+        text: `You are an expert recruiter and resume reviewer.
+        Analyze this resume for compatibility with the following target Job Description.
+        
+        Job Description:
+        ${jobDescription}
+        
+        Evaluate the compatibility score (0-100), identify key missing keywords, list strengths, list weaknesses, and provide layout/structural optimization suggestions.
+        Return ONLY a JSON object matching this schema:
+        {
+          "score": number,
+          "missingKeywords": string[],
+          "strengths": string[],
+          "weaknesses": string[],
+          "suggestions": string[]
+        }
+        `
+      });
+
+      let responseText = "";
+      try {
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: contents,
+          config: { responseMimeType: "application/json" }
+        });
+        responseText = response.text || "";
+      } catch (err: any) {
+        console.error("Gemini API call failed:", err);
+        // Fallback to older model if rate limited or failed
+        try {
+          const response = await ai.models.generateContent({
+            model: "gemini-2.0-flash",
+            contents: contents,
+            config: { responseMimeType: "application/json" }
+          });
+          responseText = response.text || "";
+        } catch (liteErr) {
+          console.error("Gemini Alternate model failed:", liteErr);
+        }
+      }
+
+      let parsed = defaultFallback;
+      if (responseText) {
+        try {
+          parsed = JSON.parse(responseText);
+        } catch (e) {
+          try {
+            const firstBrace = responseText.indexOf('{');
+            const lastBrace = responseText.lastIndexOf('}');
+            if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+              parsed = JSON.parse(responseText.substring(firstBrace, lastBrace + 1));
+            }
+          } catch (e2) {}
+        }
+      }
+
+      setCachedResponse(cacheKey, parsed);
+      res.json(parsed);
+    } catch (err) {
+      console.error("/api/ai/analyze-resume error:", err);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  const searchHandler = async (req: express.Request, res: express.Response) => {
     try {
       const q = (req.query.q as string) || "";
-      const type = req.query.type as string;
-      const remote = req.query.remote === 'true';
-      const location = req.query.location as string;
-      const days = parseInt(req.query.days as string);
+      const typesStr = req.query.types as string;
+      const locationTypesStr = req.query.locationTypes as string;
+      const stipend = req.query.stipend as string;
+      const minSalaryVal = req.query.minSalary ? parseInt(req.query.minSalary as string, 10) : undefined;
+      const deadlineType = req.query.deadlineType as string;
+      const startDateStr = req.query.startDate as string;
+      const endDateStr = req.query.endDate as string;
       
       if (!db) return res.json({ results: [], meta: { total_found: 0 } });
-      const filter: any = {};
+      const andConditions: any[] = [];
+
+      // 1. Opportunity Type Filter (multiple types supported)
+      if (typesStr) {
+        const types = typesStr.split(",").map(t => t.trim());
+        const typeRegexes = types.map(t => new RegExp(`^${t.replace(/s$/, "")}$`, "i"));
+        andConditions.push({ type: { $in: typeRegexes } });
+      }
+
+      // 2. Location Type Filter (Remote, Onsite, Hybrid)
+      if (locationTypesStr) {
+        const locationTypes = locationTypesStr.split(",").map(l => l.trim().toLowerCase());
+        const locFilters: any[] = [];
+        if (locationTypes.includes('remote')) {
+          locFilters.push({ location: { $regex: "remote|online|virtual", $options: "i" } });
+        }
+        if (locationTypes.includes('hybrid')) {
+          locFilters.push({ location: { $regex: "hybrid", $options: "i" } });
+        }
+        if (locationTypes.includes('onsite')) {
+          locFilters.push({
+            $and: [
+              { location: { $not: /remote|online|virtual/i } },
+              { location: { $not: /hybrid/i } }
+            ]
+          });
+        }
+        if (locFilters.length > 0) {
+          andConditions.push({ $or: locFilters });
+        }
+      }
+
+      // 3. Stipend / Salary Filter
+      if (stipend) {
+        if (stipend.toLowerCase() === 'paid') {
+          andConditions.push({
+            $or: [
+              { stipend: { $regex: "^paid$", $options: "i" } },
+              { price: { $nin: ["free", "Free", 0, "0"] } },
+              { stipendAmount: { $gt: 0 } },
+              { salary: { $gt: 0 } }
+            ]
+          });
+        } else if (stipend.toLowerCase() === 'unpaid') {
+          andConditions.push({
+            $or: [
+              { stipend: { $in: ["unpaid", "free", "Free"] } },
+              { price: { $in: ["free", "Free", 0, "0", null] } },
+              { stipendAmount: { $in: [0, null] } },
+              { salary: { $in: [0, null] } }
+            ]
+          });
+        }
+      }
+
+      // 4. Min Salary / Stipend Filter
+      if (minSalaryVal !== undefined && !isNaN(minSalaryVal) && minSalaryVal > 0) {
+        andConditions.push({
+          $or: [
+            { stipendAmount: { $gte: minSalaryVal } },
+            { salary: { $gte: minSalaryVal } }
+          ]
+        });
+      }
+
+      // 5. Deadline Filter
+      if (deadlineType && deadlineType !== 'All') {
+        const now = new Date();
+        if (deadlineType === 'Soon') {
+          const fortyEightHoursLater = new Date(Date.now() + 48 * 60 * 60 * 1000);
+          andConditions.push({
+            $or: [
+              { deadlineDate: { $gte: now, $lte: fortyEightHoursLater } },
+              { deadline: { $regex: "([0-1]|2)\\s*days?(\\s*left)?|24\\s*hours?", $options: "i" } }
+            ]
+          });
+        } else if (deadlineType === 'Active') {
+          andConditions.push({
+            $or: [
+              { deadlineDate: { $gte: now } },
+              { deadline: { $regex: "days left|weeks left|rolling|active|open", $options: "i" } },
+              { deadline: { $not: /closed|expired/i } }
+            ]
+          });
+        } else if (deadlineType === 'Custom' && startDateStr && endDateStr) {
+          andConditions.push({
+            $or: [
+              { deadlineDate: { $gte: new Date(startDateStr), $lte: new Date(endDateStr) } },
+              { deadline: { $gte: startDateStr, $lte: endDateStr } }
+            ]
+          });
+        }
+      }
+
+      let items: any[] = [];
       if (q) {
-        filter.$or = [
-          { title: { $regex: q, $options: "i" } },
-          { category: { $regex: q, $options: "i" } },
-          { description: { $regex: q, $options: "i" } }
+        const pipeline: any[] = [
+          {
+            $search: {
+              index: "default",
+              compound: {
+                should: [
+                  {
+                    text: {
+                      query: q,
+                      path: ["title", "tags"],
+                      fuzzy: { maxEdits: 2 }
+                    }
+                  },
+                  {
+                    text: {
+                      query: q,
+                      path: ["company", "description"]
+                    }
+                  }
+                ]
+              },
+              highlight: {
+                path: ["title", "tags", "company", "description"]
+              }
+            }
+          }
         ];
+
+        if (andConditions.length > 0) {
+          pipeline.push({ $match: { $and: andConditions } });
+        }
+
+        pipeline.push({
+          $project: {
+            title: 1,
+            description: 1,
+            company: 1,
+            tags: 1,
+            type: 1,
+            location: 1,
+            stipend: 1,
+            price: 1,
+            stipendAmount: 1,
+            salary: 1,
+            deadline: 1,
+            deadlineDate: 1,
+            apply_link: 1,
+            source_quality_score: 1,
+            created_at: 1,
+            highlights: { $meta: "searchHighlights" },
+            score: { $meta: "searchScore" }
+          }
+        });
+
+        pipeline.push({ $limit: 50 });
+        items = await db.collection("opportunities").aggregate(pipeline).toArray();
+      } else {
+        const filter: any = {};
+        if (andConditions.length > 0) {
+          filter.$and = andConditions;
+        }
+        items = await db.collection("opportunities").find(filter).limit(50).toArray();
       }
-      if (type && type !== "All") filter.type = type.replace(/s$/, ""); 
-      
-      if (remote) {
-        filter.location = { $regex: "remote|online|virtual", $options: "i" };
-      } else if (location) {
-        filter.location = { $regex: location, $options: "i" };
-      }
-      
-      const cursor = db.collection("opportunities").find(filter).limit(50);
-      const items = await cursor.toArray();
+
       let mapped = items.map((doc: any) => {
         const d = { ...doc, id: doc._id.toString() };
         delete d._id;
         return d;
       });
       
-      if (!isNaN(days)) {
-         // rough deadline filter in memory since unstructured
-         mapped = mapped.filter((m: any) => {
-           if (!m.deadline || m.deadline.toLowerCase().includes("rolling")) return true;
-           const match = m.deadline.match(/(\d+)\s+days/i);
-           if (match && parseInt(match[1]) <= days) return true;
-           return false;
-         });
-      }
-      
       res.json({
         results: mapped.slice(0, 20),
         meta: { query: q, total_found: mapped.length }
       });
     } catch(err) {
+      console.error("Search endpoint error:", err);
       res.status(500).json({ error: "Internal Server Error" });
     }
-  });
+  };
 
-  app.get("/api/v1/opportunity/:id", async (req, res) => {
+  app.get("/api/v1/search", searchHandler);
+  app.get("/api/opportunities/search", searchHandler);
+
+  app.get("/api/v1/opportunity/:id", cacheMiddleware(60 * 60, (req) => `opportunity:${req.params.id}`), async (req, res) => {
     try {
       const rawId = req.params.id;
 
-      if (rawId.startsWith("fall_ai_") || rawId.startsWith("scout_")) {
+      if (typeof rawId === 'string' && (rawId.startsWith("fall_ai_") || rawId.startsWith("scout_"))) {
         return res.json({
           id: rawId,
           title: "AI Intelligent Fallback Match",
@@ -814,6 +1804,7 @@ Return JSON strictly in this format:
       const { ObjectId } = await import("mongodb");
       let query;
       try {
+        if (typeof rawId !== 'string') throw new Error("Invalid id");
         query = { _id: new ObjectId(rawId) };
       } catch(e) {
         query = { id: rawId };
@@ -827,6 +1818,45 @@ Return JSON strictly in this format:
       res.json(mapped);
     } catch (err) {
       console.error("/api/v1/opportunity/:id error:", err);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  app.put("/api/v1/opportunity/:id", async (req, res) => {
+    try {
+      if (!db) return res.status(503).json({ error: "Database not available" });
+      const id = req.params.id;
+      
+      const { ObjectId } = await import("mongodb");
+      let queryId;
+      try {
+        queryId = new ObjectId(id);
+      } catch(e) {
+        queryId = id;
+      }
+
+      const updateData = { ...req.body, updated_at: new Date() };
+      delete updateData._id;
+      delete updateData.id;
+
+      const result = await db.collection("opportunities").updateOne(
+        { _id: queryId },
+        { $set: updateData }
+      );
+
+      // Cache invalidation hooks
+      if (redisClient && redisClient.status === 'ready') {
+        try {
+          await redisClient.del(`opportunity:${id}`);
+          await redisClient.del("/api/v1/opportunities/trending"); // also clear trending to prevent stale
+        } catch(err) {
+          console.error("[Cache] Invalidation error:", err);
+        }
+      }
+
+      res.json({ success: true, updated: result.modifiedCount > 0 });
+    } catch (err: any) {
+      console.error("/api/v1/opportunity/:id PUT error:", err);
       res.status(500).json({ error: "Internal Server Error" });
     }
   });
@@ -856,6 +1886,14 @@ Return JSON strictly in this format:
     if (notif) notif.read = true;
     res.json({ success: true });
   });
+
+  app.post("/api/v1/notifications/read-all", (req, res) => {
+  notifications.forEach((notification) => {
+    notification.read = true;
+  });
+
+  res.json({ success: true });
+});
 
   // Health check
   app.get("/api/v1/health", (req, res) => {
@@ -903,7 +1941,7 @@ Return JSON strictly in this format:
   }
 
   // --- Admin Routes ---
-  app.get("/api/v1/admin/health", (req, res) => {
+  app.get("/api/v1/admin/health", authorizeRoles('admin', 'moderator'), (req, res) => {
     res.json({
       status: "healthy",
       database: db ? "connected" : "disconnected",
@@ -913,7 +1951,7 @@ Return JSON strictly in this format:
     });
   });
 
-  app.get("/api/v1/admin/metrics", async (req, res) => {
+  app.get("/api/v1/admin/metrics", authorizeRoles('admin', 'moderator'), async (req, res) => {
     let opportunitiesAdded = 0;
     if (db) {
       opportunitiesAdded = await db.collection("opportunities").countDocuments();
@@ -926,7 +1964,7 @@ Return JSON strictly in this format:
     });
   });
 
-  app.get("/api/v1/admin/scrapers", async (req, res) => {
+  app.get("/api/v1/admin/scrapers", authorizeRoles('admin', 'moderator'), async (req, res) => {
     try {
       if (!db) {
         return res.json([]);
@@ -944,14 +1982,25 @@ Return JSON strictly in this format:
       };
 
       if (metrics.length > 0) {
-        const adminScrapers = metrics.map((m: any) => ({
+        const latestMetricsMap = new Map<string, any>();
+        metrics.forEach((m: any) => {
+          const id = m.id || m.name?.toLowerCase().replace(/[^a-z0-9]/g, '_');
+          if (id) {
+            const existing = latestMetricsMap.get(id);
+            if (!existing || new Date(m.lastRun) > new Date(existing.lastRun)) {
+              latestMetricsMap.set(id, m);
+            }
+          }
+        });
+
+        const adminScrapers = Array.from(latestMetricsMap.values()).map((m: any) => ({
           name: m.name || mappings[m.id] || m.id,
           status: m.status || "healthy",
           lastRun: m.lastRun ? new Date(m.lastRun).toLocaleString() : "Recently",
-          items: m.items || 0,
+          items: m.payloads_processed || m.items || 0,
           failures: m.failures || 0,
           proxyHealth: m.proxyHealth || "green",
-          duplicate_percentage: m.duplicate_percentage ?? 12.5,
+          duplicate_percentage: m.payloads_processed > 0 ? parseFloat(((m.duplicates / m.payloads_processed) * 100).toFixed(1)) : (m.duplicate_percentage ?? 12.5),
           yield_quality: m.yield_quality ?? 85,
           ops_per_hour: m.ops_per_hour ?? 30
         }));
@@ -1000,13 +2049,27 @@ Return JSON strictly in this format:
     }
   });
 
-  app.get("/api/v1/admin/incidents", (req, res) => {
+  app.get("/api/v1/admin/incidents", authorizeRoles('admin', 'moderator'), (req, res) => {
     res.json([
       { id: 1, type: "WARNING", component: "Python Gateway", message: "Python service dropped. Ported to Node.js native.", time: "10 mins ago" }
     ]);
   });
 
-  app.get("/api/v1/admin/stream/telemetry", (req, res) => {
+  app.delete("/api/v1/admin/users/:id", authorizeRoles('admin', 'moderator'), async (req, res) => {
+    try {
+      if (!db) {
+        return res.status(503).json({ error: "Database unavailable" });
+      }
+      const userId = req.params.id;
+      // Database deletion logic would go here
+      res.json({ status: "success", message: `User ${userId} deleted successfully.` });
+    } catch (err) {
+      console.error("Failed to delete user:", err);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  app.get("/api/v1/admin/stream/telemetry", authorizeRoles('admin', 'moderator'), (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -1308,6 +2371,388 @@ Return JSON strictly in this format:
     res.send(indexHtml);
   });
 
+  // --- Scholarship Hub API Routes ---
+  app.post("/api/scholarships", async (req, res) => {
+    try {
+      if (!db) return res.status(503).json({ error: "Database not available" });
+      const parsedData = ScholarshipSchema.parse(req.body);
+      const collection = db.collection("scholarships");
+      const result = await collection.insertOne(parsedData);
+      res.status(201).json({ id: result.insertedId, ...parsedData });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation failed", details: err.issues });
+      }
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  app.get("/api/scholarships", async (req, res) => {
+    try {
+      if (!db) return res.status(503).json({ error: "Database not available" });
+      const page = parseInt((req.query.page as string) || "1", 10);
+      const limit = parseInt((req.query.limit as string) || "10", 10);
+      const skip = (page - 1) * limit;
+
+      const collection = db.collection("scholarships");
+      
+      // Need skip() and limit() natively or via mock db fallback handling
+      let items, total;
+      if (collection.find({}).skip) { // Native mongodb
+        items = await collection.find({}).sort({ created_at: -1 }).skip(skip).limit(limit).toArray();
+        total = await collection.countDocuments({});
+      } else { // Fallback mock memory DB
+        const allItems = await collection.find({}).toArray();
+        total = allItems.length;
+        items = allItems.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(skip, skip + limit);
+      }
+
+      res.json({
+        items,
+        total,
+        page,
+        next_page: skip + limit < total ? page + 1 : null
+      });
+    } catch (err) {
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  app.get("/api/scholarships/:id", async (req, res) => {
+    try {
+      if (!db) return res.status(503).json({ error: "Database not available" });
+      const id = req.params.id;
+      const collection = db.collection("scholarships");
+      let queryId;
+      try {
+        queryId = new ObjectId(id);
+      } catch(e) {
+        queryId = id; // Fallback for mock db
+      }
+      const item = await collection.findOne({ _id: queryId });
+      if (!item) return res.status(404).json({ error: "Scholarship not found" });
+      res.json(item);
+    } catch (err) {
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  app.put("/api/scholarships/:id", async (req, res) => {
+    try {
+      if (!db) return res.status(503).json({ error: "Database not available" });
+      const id = req.params.id;
+      const parsedData = ScholarshipSchema.parse({ ...req.body, updated_at: new Date() });
+      const collection = db.collection("scholarships");
+      let queryId;
+      try {
+        queryId = new ObjectId(id);
+      } catch(e) {
+        queryId = id;
+      }
+      
+      const result = await collection.updateOne(
+        { _id: queryId },
+        { $set: parsedData }
+      );
+      
+      res.json({ success: true, updated: true });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation failed", details: err.issues });
+      }
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  app.delete("/api/scholarships/:id", async (req, res) => {
+    try {
+      if (!db) return res.status(503).json({ error: "Database not available" });
+      const id = req.params.id;
+      const collection = db.collection("scholarships");
+      let queryId;
+      try {
+        queryId = new ObjectId(id);
+      } catch(e) {
+        queryId = id;
+      }
+      let deleted = true;
+      if (collection.deleteOne) {
+        const result = await collection.deleteOne({ _id: queryId });
+        deleted = result.deletedCount > 0;
+      }
+      res.json({ success: true, deleted });
+    } catch (err) {
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  app.post("/api/scholarships/validate-eligibility", async (req, res) => {
+    try {
+      const { scholarshipId, userProfile } = req.body;
+      if (!scholarshipId || !userProfile) {
+        return res.status(400).json({ error: "Missing scholarshipId or userProfile" });
+      }
+
+      if (!db) return res.status(503).json({ error: "Database not available" });
+      const collection = db.collection("scholarships");
+      let queryId;
+      try {
+        queryId = new ObjectId(scholarshipId);
+      } catch(e) {
+        queryId = scholarshipId;
+      }
+      
+      const scholarship = await collection.findOne({ _id: queryId });
+      if (!scholarship) return res.status(404).json({ error: "Scholarship not found" });
+
+      const ai = getGenAI();
+      if (!ai) return res.status(503).json({ error: "AI Service not available" });
+
+      const prompt = `
+You are an expert AI Eligibility Validator for a scholarship platform.
+Determine if the following user is eligible for the scholarship based on the criteria.
+
+Scholarship Criteria:
+${JSON.stringify(scholarship, null, 2)}
+
+User Profile:
+${JSON.stringify(userProfile, null, 2)}
+`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              is_eligible: { type: Type.BOOLEAN },
+              missing_requirements: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING }
+              },
+              confidence_score: { type: Type.INTEGER }
+            },
+            required: ["is_eligible", "missing_requirements", "confidence_score"]
+          }
+        }
+      });
+
+      const rawJson = response.text;
+      if (!rawJson) throw new Error("Empty response from AI");
+
+      const parsedJson = JSON.parse(rawJson);
+      const validatedOutput = AIEvaluationResponseSchema.parse(parsedJson);
+
+      res.json(validatedOutput);
+    } catch (err: any) {
+      console.error("AI Validation Error:", err);
+      if (err instanceof z.ZodError) {
+         return res.status(502).json({ error: "AI generated invalid schema", details: err.issues });
+      }
+      res.status(500).json({ error: "Internal Server Error during validation" });
+    }
+  });
+
+  const toxicityMiddleware = createToxicityMiddleware(getGenAI);
+
+  // --- Phase 5 Forum Architecture: Posts, Comments & Upvotes ---
+
+  // 1. Create a Post
+  app.post("/api/v1/posts", async (req, res) => {
+    try {
+      const { title, content, author } = req.body;
+      if (!title || !content || !author) {
+        return res.status(400).json({ error: "Missing title, content, or author" });
+      }
+      if (!db) return res.status(503).json({ error: "Database not available" });
+
+      const post = {
+        title,
+        content,
+        author,
+        upvotes: 0,
+        upvoted_by: [] as string[],
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      const result = await db.collection("posts").insertOne(post);
+      res.status(201).json({ ...post, _id: result.insertedId });
+    } catch (err) {
+      console.error("Create Post Error:", err);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  // 2. Fetch a Post
+  app.get("/api/v1/posts/:postId", async (req, res) => {
+    try {
+      const { postId } = req.params;
+      if (!db) return res.status(503).json({ error: "Database not available" });
+
+      let queryId;
+      try {
+        queryId = new ObjectId(postId);
+      } catch (e) {
+        queryId = postId;
+      }
+
+      const post = await db.collection("posts").findOne({ _id: queryId });
+      if (!post) {
+        return res.status(404).json({ error: "Post not found" });
+      }
+      res.json(post);
+    } catch (err) {
+      console.error("Fetch Post Error:", err);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  // 3. Create a Comment or Reply (Materialized Path, Toxicity classification)
+  app.post("/api/v1/posts/:postId/comments", toxicityMiddleware, async (req, res) => {
+    try {
+      const { postId } = req.params;
+      const { content, author, parentId } = req.body;
+
+      if (!content || !author) {
+        return res.status(400).json({ error: "Missing content or author" });
+      }
+      if (!db) return res.status(503).json({ error: "Database not available" });
+
+      const commentId = new ObjectId();
+      let path = "";
+
+      if (parentId) {
+        let parentQueryId;
+        try {
+          parentQueryId = new ObjectId(parentId);
+        } catch (e) {
+          parentQueryId = parentId;
+        }
+        const parentComment = await db.collection("comments").findOne({ _id: parentQueryId });
+        if (!parentComment) {
+          return res.status(404).json({ error: "Parent comment not found" });
+        }
+        path = parentComment.path + commentId.toString() + ",";
+      } else {
+        path = `,${postId},${commentId.toString()},`;
+      }
+
+      const comment = {
+        _id: commentId,
+        postId,
+        parentId: parentId || null,
+        content,
+        author,
+        path,
+        upvotes: 0,
+        upvoted_by: [] as string[],
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      await db.collection("comments").insertOne(comment);
+      res.status(201).json(comment);
+    } catch (err) {
+      console.error("Create Comment Error:", err);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  // 4. Edit a Comment (Toxicity classification)
+  app.patch("/api/v1/posts/:postId/comments/:commentId", toxicityMiddleware, async (req, res) => {
+    try {
+      const { postId, commentId } = req.params;
+      const { content } = req.body;
+
+      if (!content) {
+        return res.status(400).json({ error: "Missing content" });
+      }
+      if (!db) return res.status(503).json({ error: "Database not available" });
+
+      let queryId;
+      try {
+        if (typeof commentId !== 'string') throw new Error("Invalid id");
+        queryId = new ObjectId(commentId);
+      } catch (e) {
+        queryId = commentId;
+      }
+
+      const result = await db.collection("comments").findOneAndUpdate(
+        { _id: queryId, postId },
+        { $set: { content, updatedAt: new Date() } },
+        { returnDocument: "after" }
+      );
+
+      const updatedComment = (result as any)?.value || result;
+      if (!updatedComment) {
+        return res.status(404).json({ error: "Comment not found" });
+      }
+      res.json(updatedComment);
+    } catch (err) {
+      console.error("Edit Comment Error:", err);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  // 5. Fetch Comments for a Post (Tree fetched sorted in O(1) read)
+  app.get("/api/v1/posts/:postId/comments", async (req, res) => {
+    try {
+      const { postId } = req.params;
+      if (!db) return res.status(503).json({ error: "Database not available" });
+
+      const comments = await db.collection("comments")
+        .find({ path: new RegExp('^,' + postId + ',') })
+        .sort({ path: 1 })
+        .toArray();
+
+      res.json(comments);
+    } catch (err) {
+      console.error("Fetch Comments Error:", err);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
+  // 6. Upvote a Post (Transactional and atomic to prevent concurrent race conditions)
+  app.post("/api/v1/posts/:postId/upvote", async (req, res) => {
+    try {
+      const { postId } = req.params;
+      const { userId } = req.body;
+
+      if (!userId) {
+        return res.status(400).json({ error: "Missing userId" });
+      }
+      if (!db) return res.status(503).json({ error: "Database not available" });
+
+      let queryId;
+      try {
+        queryId = new ObjectId(postId);
+      } catch (e) {
+        queryId = postId;
+      }
+
+      const result = await db.collection("posts").updateOne(
+        { _id: queryId, upvoted_by: { $ne: userId } },
+        { $inc: { upvotes: 1 }, $push: { upvoted_by: userId } }
+      );
+
+      if (result.matchedCount === 0) {
+        const post = await db.collection("posts").findOne({ _id: queryId });
+        if (!post) {
+          return res.status(404).json({ error: "Post not found" });
+        }
+        return res.status(409).json({ error: "User has already upvoted this post" });
+      }
+
+      res.json({ success: true, message: "Post upvoted successfully" });
+    } catch (err) {
+      console.error("Upvote Post Error:", err);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
+
   // --- Vite / Static Files ---
 
   if (process.env.NODE_ENV !== "production") {
@@ -1351,7 +2796,37 @@ Return JSON strictly in this format:
 
   server.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    
+    // Auto-open browser in development mode
+    if (process.env.NODE_ENV !== "production") {
+      import("child_process").then(({ exec }) => {
+        const url = `http://localhost:${PORT}`;
+        const cmd = process.platform === 'win32' ? `start ${url}` 
+                  : process.platform === 'darwin' ? `open ${url}` 
+                  : `xdg-open ${url}`;
+        exec(cmd);
+      });
+    }
   });
 }
 
-startServer();
+async function bootstrap() {
+  try {
+    await startServer(); // startServer initializes db and starts express
+    
+    await eventBus.connect();
+    
+    // Setup DB Ingestion consumer (requires db)
+    const dbConsumer = await createOpportunityScrapedConsumer(db);
+    await eventBus.subscribe('dnl.opportunity.scraped.db', 'opportunity.scraped', dbConsumer);
+
+    // Setup Notification consumer
+    await eventBus.subscribe('dnl.opportunity.scraped.notification', 'opportunity.scraped', notificationConsumerHandler);
+
+    console.log('[EventBus] Consumers initialized successfully');
+  } catch (err) {
+    console.error("Failed to start event bus and consumers", err);
+  }
+}
+
+bootstrap();

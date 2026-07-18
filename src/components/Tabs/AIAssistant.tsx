@@ -2,13 +2,11 @@ import React, { useState } from 'react';
 import { FileText, Bot, Briefcase, GraduationCap, Sparkles, ChevronRight, CheckCircle, Search, ScrollText, Send } from 'lucide-react';
 import { UserProfile } from '../../types';
 import * as geminiService from '../../services/gemini';
+import { ErrorState } from '../ui/states';
+import { useAppContext } from '../../context/AppContext';
 
-interface AIAssistantProps {
-  user: any;
-  profile: UserProfile | null;
-}
-
-export default function AIAssistant({ user, profile }: AIAssistantProps) {
+export default function AIAssistant() {
+  const { user, profile } = useAppContext();
   const [activeModule, setActiveModule] = useState<string | null>(null);
   
   const modules = [
@@ -108,102 +106,290 @@ export default function AIAssistant({ user, profile }: AIAssistantProps) {
 // Resume Review Component
 // ---------------------------
 function ResumeReview() {
+  const [tab, setTab] = useState<'upload' | 'paste'>('upload');
   const [resumeText, setResumeText] = useState("");
+  const [fileName, setFileName] = useState("");
+  const [fileBase64, setFileBase64] = useState("");
+  const [jobDescription, setJobDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<any>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) return;
+
+    if (selectedFile.size > 5 * 1024 * 1024) {
+      setReviewError("File size exceeds 5MB limit. Please upload a smaller file.");
+      return;
+    }
+    if (selectedFile.type !== "application/pdf") {
+      setReviewError("Invalid file type. Please upload a PDF file.");
+      return;
+    }
+
+    setReviewError(null);
+    setFileName(selectedFile.name);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFileBase64(reader.result as string);
+    };
+    reader.readAsDataURL(selectedFile);
+  };
 
   const handleReview = async () => {
-    if (!resumeText.trim()) return;
+    if (tab === 'upload' && !fileBase64) {
+      setReviewError("Please select a PDF resume file first.");
+      return;
+    }
+    if (tab === 'paste' && !resumeText.trim()) {
+      setReviewError("Please paste your resume content first.");
+      return;
+    }
+    if (!jobDescription.trim()) {
+      setReviewError("Please enter the target job description.");
+      return;
+    }
+
     setLoading(true);
+    setReviewError(null);
+    setFeedback(null);
+
     try {
-      // Direct call to Gemini via server proxy
-      const res = await fetch("/api/v1/ai/resume_review", {
+      const payload: any = { jobDescription };
+      if (tab === 'upload') {
+        payload.resumeBase64 = fileBase64;
+        payload.fileName = fileName;
+      } else {
+        payload.resumeText = resumeText;
+      }
+
+      const res = await fetch("/api/ai/analyze-resume", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resume: resumeText })
+        body: JSON.stringify(payload)
       });
+
+      if (!res.ok) throw new Error("API failed");
       const data = await res.json();
       setFeedback(data);
-    } catch (e) {
-      console.error(e);
-      // Fallback dummy feedback for preview if API missing
-      setFeedback({
-        score: 65,
-        strengths: ["Clear formatting", "Good action verbs used"],
-        weaknesses: ["Missing quantified impact metrics", "Skills section is too broad"],
-        suggestions: ["Change 'Worked on backend' to 'Developed backend Python API servicing 10k requests/sec'"]
-      });
+    } catch {
+      setReviewError('Unable to analyze the resume right now. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const copyToClipboard = (text: string, type: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(type);
+    setTimeout(() => setCopied(null), 2000);
   };
 
   return (
     <div className="animate-fade-in space-y-6">
       <header>
         <h2 className="text-3xl font-bold tracking-tight text-gray-900 flex items-center gap-3">
-          <FileText className="w-8 h-8 text-purple-600" /> AI Resume Review
+          <FileText className="w-8 h-8 text-purple-600" /> AI Resume Review & ATS Analyzer
         </h2>
-        <p className="text-gray-500">Paste your resume content to identify structural gaps and receive ATS-optimizations.</p>
+        <p className="text-gray-500">Upload your PDF resume, paste the target job description, and analyze matching keyword compatibility.</p>
       </header>
 
-      <div className="clean-card p-6">
-        <textarea 
-          placeholder="Paste your plain-text resume here..." 
-          className="w-full h-64 border border-gray-200 rounded-xl p-4 text-sm focus:ring-2 focus:ring-purple-600 outline-none resize-none font-mono"
-          value={resumeText}
-          onChange={e => setResumeText(e.target.value)}
-        />
-        <div className="mt-4 flex justify-end">
-           <button 
-             onClick={handleReview} 
-             disabled={loading || !resumeText}
-             className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold shadow-md disabled:bg-gray-300 transition-colors flex items-center gap-2"
-           >
-             {loading ? <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> : <Sparkles className="w-4 h-4" />}
-             Analyze Resume
-           </button>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Inputs Card */}
+        <div className="clean-card p-6 space-y-6 flex flex-col justify-between">
+          <div className="space-y-4">
+            <div className="flex border-b border-gray-100 pb-0.5">
+              <button
+                onClick={() => { setTab('upload'); setFeedback(null); }}
+                className={`pb-3 text-sm font-bold border-b-2 transition-colors px-4 ${tab === 'upload' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+              >
+                Upload PDF Resume
+              </button>
+              <button
+                onClick={() => { setTab('paste'); setFeedback(null); }}
+                className={`pb-3 text-sm font-bold border-b-2 transition-colors px-4 ${tab === 'paste' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-900'}`}
+              >
+                Paste Plain Text
+              </button>
+            </div>
+
+            {tab === 'upload' ? (
+              <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 flex flex-col items-center justify-center text-center hover:border-purple-300 transition-colors">
+                <FileText className="w-12 h-12 text-gray-300 mb-3" />
+                <span className="text-sm font-medium text-gray-700">
+                  {fileName ? fileName : "Upload your PDF resume (Max 5MB)"}
+                </span>
+                <input
+                  type="file"
+                  accept=".pdf"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  id="resume-upload"
+                />
+                <label
+                  htmlFor="resume-upload"
+                  className="mt-4 px-4 py-2 border border-gray-300 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+                >
+                  Select File
+                </label>
+              </div>
+            ) : (
+              <textarea
+                placeholder="Paste your plain-text resume here..."
+                className="w-full h-44 border border-gray-200 rounded-xl p-4 text-xs focus:ring-2 focus:ring-purple-600 outline-none resize-none font-mono"
+                value={resumeText}
+                onChange={e => setResumeText(e.target.value)}
+              />
+            )}
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Target Job Description</label>
+              <textarea
+                placeholder="Paste the job description of the role you are applying for..."
+                className="w-full h-44 border border-gray-200 rounded-xl p-4 text-xs focus:ring-2 focus:ring-purple-600 outline-none resize-none"
+                value={jobDescription}
+                onChange={e => setJobDescription(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-gray-100 flex justify-end">
+            <button
+              onClick={handleReview}
+              disabled={loading || (tab === 'upload' && !fileBase64) || (tab === 'paste' && !resumeText) || !jobDescription}
+              className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold shadow-md disabled:bg-gray-300 transition-colors flex items-center gap-2 cursor-pointer"
+            >
+              {loading ? <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              Analyze Compatibility
+            </button>
+          </div>
+        </div>
+
+        {/* Feedback Card */}
+        <div className="flex flex-col">
+          {reviewError && (
+            <div className="mb-6">
+              <ErrorState title="Resume analysis failed" description={reviewError} onRetry={handleReview} retrying={loading} />
+            </div>
+          )}
+
+          {feedback ? (
+            <div className="clean-card p-6 flex-1 space-y-6 animate-fade-in">
+              <div className="flex items-center justify-between border-b pb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">ATS Assessment</h3>
+                  <p className="text-xs text-gray-500">Compatibility index and critical keywords audit</p>
+                </div>
+                {/* SVG Gauge Meter */}
+                <div className="relative w-20 h-20 shrink-0">
+                  <svg className="w-full h-full -rotate-90">
+                    <circle cx="40" cy="40" r="32" className="stroke-gray-100 fill-none" strokeWidth="6" />
+                    <circle
+                      cx="40"
+                      cy="40"
+                      r="32"
+                      className={`fill-none transition-all duration-500 ${feedback.score >= 80 ? 'stroke-green-500' : feedback.score >= 50 ? 'stroke-amber-500' : 'stroke-red-500'}`}
+                      strokeWidth="6"
+                      strokeDasharray={2 * Math.PI * 32}
+                      strokeDashoffset={(2 * Math.PI * 32) - (feedback.score / 100) * (2 * Math.PI * 32)}
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-xl font-black text-gray-900 leading-none">{feedback.score}</span>
+                    <span className="text-[7px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">SCORE</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-5 text-xs">
+                {/* Missing Keywords */}
+                {feedback.missingKeywords && feedback.missingKeywords.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl">
+                    <div className="flex justify-between items-center mb-2">
+                      <h4 className="font-bold text-amber-800 flex items-center gap-1.5">
+                        ⚠️ Missing ATS Keywords
+                      </h4>
+                      <button
+                        onClick={() => copyToClipboard(feedback.missingKeywords.join(", "), 'keywords')}
+                        className="text-[10px] font-bold text-amber-600 hover:text-amber-800 transition-colors"
+                      >
+                        {copied === 'keywords' ? '✓ Copied' : 'Copy'}
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {feedback.missingKeywords.map((k: string, i: number) => (
+                        <span key={i} className="px-2 py-1 bg-white border border-amber-200 text-amber-700 font-semibold rounded-md">
+                          {k}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Strengths */}
+                {feedback.strengths && feedback.strengths.length > 0 && (
+                  <div>
+                    <h4 className="font-bold text-green-700 flex items-center gap-1.5 mb-2">✓ Strengths Identified</h4>
+                    <ul className="list-disc pl-5 text-gray-600 space-y-1">
+                      {feedback.strengths.map((s: string, i: number) => (
+                        <li key={i}>{s}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Weaknesses */}
+                {feedback.weaknesses && feedback.weaknesses.length > 0 && (
+                  <div>
+                    <h4 className="font-bold text-red-600 flex items-center gap-1.5 mb-2">⚡ Areas to Improve</h4>
+                    <ul className="list-disc pl-5 text-gray-600 space-y-1">
+                      {feedback.weaknesses.map((w: string, i: number) => (
+                        <li key={i}>{w}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Recommendations / Suggestions */}
+                {feedback.suggestions && feedback.suggestions.length > 0 && (
+                  <div className="bg-purple-50 border border-purple-100 p-4 rounded-xl">
+                    <div className="flex justify-between items-center mb-2">
+                      <h4 className="font-bold text-purple-800 flex items-center gap-1.5">
+                        💡 Key Recommendations
+                      </h4>
+                      <button
+                        onClick={() => copyToClipboard(feedback.suggestions.join("\n"), 'suggestions')}
+                        className="text-[10px] font-bold text-purple-600 hover:text-purple-800 transition-colors"
+                      >
+                        {copied === 'suggestions' ? '✓ Copied' : 'Copy Recommendations'}
+                      </button>
+                    </div>
+                    <ul className="list-disc pl-5 text-purple-900 space-y-1.5">
+                      {feedback.suggestions.map((s: string, i: number) => (
+                        <li key={i}>{s}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="border border-gray-200 border-dashed rounded-xl p-8 flex flex-col items-center justify-center text-center text-gray-400 flex-1 min-h-[300px]">
+              <Sparkles className="w-10 h-10 text-gray-300 mb-3 animate-pulse" />
+              <p className="text-sm font-semibold">No active analysis</p>
+              <p className="text-xs text-gray-400 mt-1 max-w-xs">Upload your resume and enter a target job description to verify compatibility matching.</p>
+            </div>
+          )}
         </div>
       </div>
-
-      {feedback && (
-        <div className="clean-card p-8 animate-fade-in border-t-4 border-t-purple-600">
-           <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-100">
-             <div>
-               <h3 className="text-xl font-bold text-gray-900">Analysis Results</h3>
-               <p className="text-sm text-gray-500">ATS compatibility and framing check</p>
-             </div>
-             <div className="text-right">
-                <span className="text-4xl font-black text-purple-600">{feedback.score}</span><span className="text-gray-400 font-bold">/100</span>
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mt-1">Impact Score</p>
-             </div>
-           </div>
-
-           <div className="space-y-6 text-sm">
-              <div>
-                <h4 className="font-bold text-green-700 flex items-center gap-2 mb-2"><CheckCircle className="w-4 h-4" /> Strengths</h4>
-                <ul className="list-disc ml-5 text-gray-700 space-y-1">
-                  {feedback.strengths?.map((s: string, i: number) => <li key={i}>{s}</li>)}
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-bold text-red-600 flex items-center gap-2 mb-2"><Search className="w-4 h-4" /> Areas for Improvement</h4>
-                <ul className="list-disc ml-5 text-gray-700 space-y-1">
-                  {feedback.weaknesses?.map((w: string, i: number) => <li key={i}>{w}</li>)}
-                </ul>
-              </div>
-              <div className="bg-purple-50 p-4 rounded-lg">
-                <h4 className="font-bold text-purple-800 flex items-center gap-2 mb-2"><Sparkles className="w-4 h-4" /> Recommended Phrasing</h4>
-                <ul className="list-disc ml-5 text-purple-900 space-y-1">
-                  {feedback.suggestions?.map((s: string, i: number) => <li key={i}>{s}</li>)}
-                </ul>
-              </div>
-           </div>
-        </div>
-      )}
     </div>
   );
 }
+
 
 // ---------------------------
 // Cover Letter Component
