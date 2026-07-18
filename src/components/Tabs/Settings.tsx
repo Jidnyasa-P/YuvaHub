@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bell, Lock, UserX, Info } from 'lucide-react';
+import { Bell, Lock, UserX, Info, HelpCircle } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 
 export default function SettingsTab() {
@@ -80,6 +80,35 @@ export default function SettingsTab() {
           </div>
         </div>
 
+        {/* Help & Support */}
+        <div className="clean-card p-6 dark:bg-gray-800 dark:border-gray-700">
+          <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700">
+            <HelpCircle className="w-5 h-5 text-gray-400" />
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Help & Support</h3>
+          </div>
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Browse FAQs, getting started steps, and troubleshooting guides—or contact the team.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveTab('help')}
+                className="clean-btn text-xs px-4 py-2 cursor-pointer"
+              >
+                Open Help Center
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('support')}
+                className="clean-btn-outline text-xs px-4 py-2 cursor-pointer"
+              >
+                Support & Feedback
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Account control */}
         <div className="clean-card p-6 border-red-100 dark:bg-gray-800 dark:border-gray-700">
           <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700">
@@ -88,19 +117,26 @@ export default function SettingsTab() {
           </div>
           <div className="space-y-4">
             <button className="clean-btn-outline w-full sm:w-auto px-6 py-2">Change Password</button>
-            <div className="pt-4 mt-4 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center">
+            <div className="pt-4 mt-4 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center flex-wrap gap-4">
               <div>
                 <button className="px-6 py-2 bg-red-50 text-red-600 font-medium rounded-lg hover:bg-red-100 transition-colors">
                   Delete Account
                 </button>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">This action is permanent and cannot be undone.</p>
               </div>
-              <div className="flex gap-4">
+              <div className="flex flex-wrap gap-4">
                 <button
                   onClick={() => setActiveTab('security')}
                   className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
                 >
                   <span>Security Center</span>
+                  <span className="text-sm">→</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('help')}
+                  className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-none p-0"
+                >
+                  <span>Help Center</span>
                   <span className="text-sm">→</span>
                 </button>
                 <button

@@ -1,12 +1,17 @@
 import React, { useState } from 'react';
-import { Sparkles, Globe, BrainCircuit, Search, Zap, Code, Lightbulb, Trophy, Target, ArrowRight, Mail, X, Github, Sun, Moon } from 'lucide-react';
+import { Sparkles, Globe, BrainCircuit, Search, Zap, Code, Lightbulb, Trophy, Target, ArrowRight, Mail, X, Github, Sun, Moon, ChevronDown } from 'lucide-react';
 import { signInWithGoogle, signInWithGithub } from '../lib/firebase';
 import { useAppContext } from '../context/AppContext';
+import HelpCenter from './Tabs/HelpCenter';
+import Security from './Tabs/Security';
+import Legal from './Tabs/Legal';
+import Support from './Tabs/Support';
 
 export default function SplashAuth() {
-  const { setActiveTab, theme, toggleTheme } = useAppContext();
+  const { activeTab, setActiveTab, theme, toggleTheme } = useAppContext();
   const [loading, setLoading] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
 
   const handleGoogleLogin = async () => {
     setLoading('google');
@@ -69,176 +74,284 @@ export default function SplashAuth() {
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="px-6 lg:px-12 py-16 lg:py-24 max-w-7xl mx-auto grid lg:grid-cols-2 gap-10 items-center">
-        <div>
-          <div className="inline-block px-3 py-1 bg-orange-cta/10 border border-orange-cta/20 text-orange-cta text-[11px] font-bold uppercase tracking-wide rounded-full mb-6">
-            ⚡ Connecting Talent to Opportunity
-          </div>
-          <h1 className="text-[46px] font-[800] leading-[1.12] text-text-primary mb-6 transition-colors duration-250">
-            Unlock Your <span className="text-primary-blue italic">Career</span> Potential
-          </h1>
-          <p className="text-[16px] text-text-secondary leading-[1.65] mb-8 max-w-lg transition-colors duration-250">
-            Join the premier network matching ambitious students with real-world competitions, hackathons, and tech roles globally.
-          </p>
-          
-          <div className="relative max-w-md shadow-[0_10px_30px_var(--shadow-color)] border border-border-theme rounded-[10px] bg-surface flex items-center p-1 mb-6 transition-colors duration-250 focus-within:ring-2 focus-within:ring-focus-ring">
-            <Search className="w-5 h-5 text-muted ml-3 shrink-0" />
-            <input 
-              type="text" 
-              placeholder="Search companies, competitions, jobs..." 
-              className="flex-1 bg-transparent border-none outline-none text-[13px] px-3 py-2 text-text-primary placeholder:text-muted"
-            />
-            <button onClick={handleLogin} className="bg-search-btn text-white text-[13px] font-bold px-5 py-[13px] rounded-[6px] hover:brightness-110 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-white">
-              Search
+      {activeTab === 'dashboard' ? (
+        <>
+          {/* Hero Section */}
+          <section className="px-6 lg:px-12 py-16 lg:py-24 max-w-7xl mx-auto grid lg:grid-cols-2 gap-10 items-center">
+            <div>
+              <div className="inline-block px-3 py-1 bg-orange-cta/10 border border-orange-cta/20 text-orange-cta text-[11px] font-bold uppercase tracking-wide rounded-full mb-6">
+                ⚡ Connecting Talent to Opportunity
+              </div>
+              <h1 className="text-[46px] font-[800] leading-[1.12] text-text-primary mb-6 transition-colors duration-250">
+                Unlock Your <span className="text-primary-blue italic">Career</span> Potential
+              </h1>
+              <p className="text-[16px] text-text-secondary leading-[1.65] mb-8 max-w-lg transition-colors duration-250">
+                Join the premier network matching ambitious students with real-world competitions, hackathons, and tech roles globally.
+              </p>
+              
+              <div className="relative max-w-md shadow-[0_10px_30px_var(--shadow-color)] border border-border-theme rounded-[10px] bg-surface flex items-center p-1 mb-6 transition-colors duration-250 focus-within:ring-2 focus-within:ring-focus-ring">
+                <Search className="w-5 h-5 text-muted ml-3 shrink-0" />
+                <input 
+                  type="text" 
+                  placeholder="Search companies, competitions, jobs..." 
+                  className="flex-1 bg-transparent border-none outline-none text-[13px] px-3 py-2 text-text-primary placeholder:text-muted"
+                />
+                <button onClick={handleLogin} className="bg-search-btn text-white text-[13px] font-bold px-5 py-[13px] rounded-[6px] hover:brightness-110 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-white">
+                  Search
+                </button>
+              </div>
+              
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-[12px] font-medium text-muted">Trending:</span>
+                {['Generative AI', 'Web3', 'Product Management', 'Data Science'].map(t => (
+                  <span key={t} className="px-3 py-1 bg-surface-secondary border border-border-theme text-text-secondary text-[12px] rounded-[100px] hover:brightness-90 dark:hover:brightness-110 transition-colors cursor-pointer">
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </div>
+            
+            <div className="relative h-[400px] w-full rounded-[20px] bg-gradient-to-br from-blue-50 to-green-50 dark:from-blue-900/30 dark:to-green-900/20 shadow-lg border border-border-theme flex items-center justify-center p-8 transition-colors duration-250">
+               <div className="absolute top-[10%] left-[10%] w-[120px] bg-surface p-3 rounded-xl shadow-[0_10px_30px_var(--shadow-color)] border border-border-theme flex flex-col items-center gap-2 animate-float" style={{ animationDelay: '0s' }}>
+                  <span className="text-3xl">🚀</span>
+                  <span className="text-[10px] font-bold text-text-primary">Landed job at Google</span>
+               </div>
+               <div className="absolute bottom-[20%] right-[5%] w-[130px] bg-surface p-3 rounded-xl shadow-[0_10px_30px_var(--shadow-color)] border border-border-theme flex flex-col items-center gap-2 animate-float" style={{ animationDelay: '0.8s' }}>
+                  <span className="text-3xl">🏆</span>
+                  <span className="text-[10px] font-bold text-text-primary">Won ETHGlobal</span>
+               </div>
+               <div className="absolute top-[40%] right-[15%] w-[100px] bg-surface p-3 rounded-xl shadow-[0_10px_30px_var(--shadow-color)] border border-border-theme flex flex-col items-center gap-2 animate-float" style={{ animationDelay: '1.5s' }}>
+                  <span className="text-3xl">💡</span>
+                  <span className="text-[10px] font-bold text-text-primary">Top 10 Finalist</span>
+               </div>
+               <div className="w-64 h-64 bg-surface/40 backdrop-blur-md rounded-full absolute border border-border-theme/60"></div>
+            </div>
+          </section>
+
+          {/* Explore Your Interest */}
+          <section id="explore" className="bg-surface-secondary py-20 px-6 lg:px-12 transition-colors duration-250">
+            <div className="max-w-7xl mx-auto">
+              <div className="text-center mb-12">
+                <h2 className="text-[28px] font-[700] text-text-primary mb-3 transition-colors duration-250">Explore Your Interest</h2>
+                <p className="text-[15px] text-text-secondary transition-colors duration-250">Find standard competitions tailored to your skills and domain.</p>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[20px]">
+                 {[ 
+                   { title: 'Coding & Tech', sub: 'Hackathons, DSA', icon: Code, colorClass: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
+                   { title: 'Business & Mgmt', sub: 'Case studies', icon: Lightbulb, colorClass: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300' },
+                   { title: 'Design & UX', sub: 'UI/UX Challenges', icon: Target, colorClass: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' },
+                   { title: 'Cultural & Arts', sub: 'Festivals, Media', icon: Sparkles, colorClass: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300' }
+                 ].map((cat, i) => (
+                    <div key={i} className="bg-surface rounded-[14px] p-7 flex flex-col items-center text-center shadow-sm border border-border-theme transition-all duration-200 hover:-translate-y-[2px] hover:border-primary-blue hover:shadow-[0_0_0_3px_var(--focus-ring)] cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring" tabIndex={0}>
+                       <div className={`w-[52px] h-[52px] rounded-[14px] flex items-center justify-center mb-4 ${cat.colorClass}`}>
+                          <cat.icon className="w-6 h-6" />
+                       </div>
+                       <h3 className="text-[15px] font-[600] text-text-primary mb-1">{cat.title}</h3>
+                       <p className="text-[12px] text-text-secondary">{cat.sub}</p>
+                    </div>
+                 ))}
+              </div>
+            </div>
+          </section>
+
+          {/* Featured Competitions */}
+          <section id="competitions" className="py-20 px-6 lg:px-12 max-w-7xl mx-auto">
+             <div className="flex items-center justify-between mb-10">
+                <h2 className="text-[28px] font-[700] text-text-primary transition-colors duration-250">Featured Competitions</h2>
+                <button onClick={handleLogin} className="text-primary-blue font-bold text-[14px] hover:underline flex items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded">View All <ArrowRight className="w-4 h-4" /></button>
+             </div>
+
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-[20px]">
+                {/* Card 1 */}
+                <div className="bg-surface border border-border-theme rounded-[12px] overflow-hidden shadow-[0_10px_30px_var(--shadow-color)] hover:shadow-lg hover:-translate-y-[3px] transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring" tabIndex={0}>
+                   <div className="h-[150px] bg-gradient-to-br from-[#0F172A] to-[#1E3A8A] flex items-center justify-center relative p-4">
+                      <div className="absolute top-3 left-3 px-2 py-1 bg-[#16A34A] text-white text-[10px] font-bold uppercase rounded-full">LIVE</div>
+                      <h3 className="text-white text-xl font-black tracking-widest text-center opacity-80 mt-2">HACKATHON 2024</h3>
+                   </div>
+                   <div className="p-5">
+                      <div className="flex items-center gap-3 mb-3">
+                         <div className="w-[22px] h-[22px] rounded-[5px] bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 flex items-center justify-center text-[10px] font-bold">ML</div>
+                         <span className="text-[13px] text-text-secondary font-medium">Major League Hacking</span>
+                      </div>
+                      <h4 className="text-[15px] font-[600] text-text-primary mb-3 line-clamp-2">Global Innovation Challenge: AI & Web3</h4>
+                      <div className="flex items-center text-[12px] text-text-secondary justify-between">
+                         <span>📅 Apr 15 - Apr 17</span>
+                         <span>👥 1,204 Registered</span>
+                      </div>
+                   </div>
+                </div>
+
+                {/* Card 2 */}
+                <div className="bg-surface border border-border-theme rounded-[12px] overflow-hidden shadow-[0_10px_30px_var(--shadow-color)] hover:shadow-lg hover:-translate-y-[3px] transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring" tabIndex={0}>
+                   <div className="h-[150px] bg-surface-secondary flex items-center justify-center relative p-4">
+                      <div className="absolute top-3 left-3 px-2 py-1 bg-[#F97316] text-white text-[10px] font-bold uppercase rounded-full">PREMIUM</div>
+                      <Trophy className="w-16 h-16 text-muted opacity-50" />
+                   </div>
+                   <div className="p-5">
+                      <div className="flex items-center gap-3 mb-3">
+                         <div className="w-[22px] h-[22px] rounded-[5px] bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300 flex items-center justify-center text-[10px] font-bold">ST</div>
+                         <span className="text-[13px] text-text-secondary font-medium">Stanford Univ</span>
+                      </div>
+                      <h4 className="text-[15px] font-[600] text-text-primary mb-3 line-clamp-2">Stanford Business Case Competition 2025</h4>
+                      <div className="flex items-center text-[12px] text-text-secondary justify-between">
+                         <span>📅 May 01 - May 05</span>
+                         <span>👥 850 Registered</span>
+                      </div>
+                   </div>
+                </div>
+
+                {/* Card 3 */}
+                <div className="bg-surface border border-border-theme rounded-[12px] overflow-hidden shadow-[0_10px_30px_var(--shadow-color)] hover:shadow-lg hover:-translate-y-[3px] transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring" tabIndex={0}>
+                   <div className="h-[150px] bg-surface-secondary flex items-center justify-center relative p-4">
+                      <div className="absolute top-3 left-3 px-2 py-1 bg-[#16A34A] text-white text-[10px] font-bold uppercase rounded-full">FREE</div>
+                      <Target className="w-16 h-16 text-muted opacity-50" />
+                   </div>
+                   <div className="p-5">
+                      <div className="flex items-center gap-3 mb-3">
+                         <div className="w-[22px] h-[22px] rounded-[5px] bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300 flex items-center justify-center text-[10px] font-bold">GO</div>
+                         <span className="text-[13px] text-text-secondary font-medium">Google Developer Groups</span>
+                      </div>
+                      <h4 className="text-[15px] font-[600] text-text-primary mb-3 line-clamp-2">Solution Challenge India Regional</h4>
+                      <div className="flex items-center text-[12px] text-text-secondary justify-between">
+                         <span>📅 Mar 10 - Jun 20</span>
+                         <span>👥 5,200 Registered</span>
+                      </div>
+                   </div>
+                </div>
+             </div>
+          </section>
+
+          {/* Stats Bar */}
+          <section id="stats" className="bg-primary-blue dark:bg-surface-secondary dark:border-y border-border-theme py-[52px] px-6 transition-colors duration-250">
+             <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-center gap-10 md:gap-[80px] text-center">
+                <div>
+                   <div className="text-[40px] font-[800] text-white dark:text-text-primary">5M+</div>
+                   <div className="text-[13px] uppercase tracking-[0.1em] text-white/80 dark:text-text-secondary mt-1 font-medium">Users</div>
+                </div>
+                <div className="hidden md:block w-px h-[40px] bg-white/20 dark:bg-border-theme"></div>
+                <div>
+                   <div className="text-[40px] font-[800] text-white dark:text-text-primary">100k+</div>
+                   <div className="text-[13px] uppercase tracking-[0.1em] text-white/80 dark:text-text-secondary mt-1 font-medium">Events</div>
+                </div>
+                <div className="hidden md:block w-px h-[40px] bg-white/20 dark:bg-border-theme"></div>
+                <div>
+                   <div className="text-[40px] font-[800] text-white dark:text-text-primary">2k+</div>
+                   <div className="text-[13px] uppercase tracking-[0.1em] text-white/80 dark:text-text-secondary mt-1 font-medium">Companies</div>
+                </div>
+                <div className="hidden md:block w-px h-[40px] bg-white/20 dark:bg-border-theme"></div>
+                <div>
+                   <div className="text-[40px] font-[800] text-white dark:text-text-primary">500k+</div>
+                   <div className="text-[13px] uppercase tracking-[0.1em] text-white/80 dark:text-text-secondary mt-1 font-medium">Hired</div>
+                </div>
+             </div>
+          </section>
+
+          {/* Frequently Asked Questions Section */}
+          <section className="py-20 px-6 lg:px-12 max-w-4xl mx-auto border-t border-border-theme transition-colors duration-250 animate-fade-in">
+             <div className="text-center mb-12">
+                <h2 className="text-[13px] uppercase tracking-[0.2em] text-primary-blue font-bold mb-2">Frequently Asked Questions</h2>
+                <h3 className="text-[32px] font-[800] text-text-primary tracking-tight transition-colors duration-250">
+                   You Have Questions, <br className="hidden sm:inline" /> We Have Answers
+                </h3>
+                <p className="text-[15px] text-text-secondary mt-3">Find quick answers before contacting support.</p>
+             </div>
+
+             <div className="space-y-4">
+                {[
+                   {
+                      q: "What is YuvaHub and who is it for?",
+                      a: "YuvaHub is a unified discovery and matching platform designed specifically for students, developers, and early-career tech professionals to find verified hackathons, competitions, fellowships, and jobs."
+                   },
+                   {
+                      q: "Do I need to pay to use YuvaHub?",
+                      a: "No, YuvaHub is completely free for students and early-career talent. You can search, browse, apply, and use the AI matches without any cost."
+                   },
+                   {
+                      q: "How does YuvaHub verify opportunities?",
+                      a: "Our team and system aggressively audit every listing for legitimacy, ensuring that all job postings, hackathons, and scholarships are active and from verified organizations."
+                   },
+                   {
+                      q: "How does the AI Assistant match opportunities to my profile?",
+                      a: "The AI Assistant evaluates your profile's skills, field of study, and goals against opportunity metadata to highlight items with the highest affinity for your background."
+                   },
+                   {
+                      q: "How can I contact support or submit feedback?",
+                      a: "You can open the Support & Feedback tab once signed in, or use the Help Center resources to troubleshoot login and account access issues."
+                   }
+                ].map((item, idx) => {
+                   const isOpen = openFaqIndex === idx;
+                   return (
+                      <div 
+                         key={idx}
+                         className={`border rounded-2xl overflow-hidden bg-surface transition-all duration-300 ${
+                            isOpen 
+                               ? 'border-primary-blue shadow-md -translate-y-[2px]' 
+                               : 'border-border-theme hover:border-primary-blue/50 hover:shadow-sm'
+                         }`}
+                      >
+                         <button
+                            type="button"
+                            onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
+                            className="w-full text-left p-5 flex justify-between items-center gap-4 cursor-pointer bg-transparent border-none focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+                         >
+                            <span className="font-bold text-sm md:text-base text-text-primary">{item.q}</span>
+                            <span 
+                               className={`p-2 rounded-xl bg-surface-secondary text-text-secondary transition-transform duration-300 ${
+                                  isOpen ? 'rotate-180 bg-primary-blue/10 text-primary-blue' : ''
+                               }`}
+                            >
+                               <ChevronDown className="w-4 h-4" />
+                            </span>
+                         </button>
+                         <div 
+                            className={`grid transition-[grid-template-rows] duration-300 ease-out ${
+                               isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                            }`}
+                         >
+                            <div className="overflow-hidden">
+                               <div className="px-5 pb-5 border-t border-border-theme pt-4 text-xs md:text-sm text-text-secondary leading-relaxed">
+                                  {item.a}
+                               </div>
+                            </div>
+                         </div>
+                      </div>
+                   );
+                })}
+             </div>
+
+             <div className="mt-10 text-center">
+                <button
+                   onClick={() => {
+                      setActiveTab('help');
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                   }}
+                   className="inline-flex items-center gap-2 text-primary-blue font-bold text-sm hover:underline cursor-pointer bg-transparent border-none"
+                >
+                   View All FAQs <ArrowRight className="w-4 h-4" />
+                </button>
+             </div>
+          </section>
+        </>
+      ) : (
+        <div className="max-w-7xl mx-auto px-6 lg:px-12 py-10">
+          <div className="mb-8">
+            <button 
+              onClick={() => {
+                setActiveTab('dashboard');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="flex items-center gap-2 text-sm text-primary-blue hover:underline font-bold bg-transparent border-none cursor-pointer"
+            >
+              ← Back to Home / Login
             </button>
           </div>
-          
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="text-[12px] font-medium text-muted">Trending:</span>
-            {['Generative AI', 'Web3', 'Product Management', 'Data Science'].map(t => (
-              <span key={t} className="px-3 py-1 bg-surface-secondary border border-border-theme text-text-secondary text-[12px] rounded-[100px] hover:brightness-90 dark:hover:brightness-110 transition-colors cursor-pointer">
-                {t}
-              </span>
-            ))}
-          </div>
+          {activeTab === 'help' && <HelpCenter />}
+          {activeTab === 'security' && <Security />}
+          {activeTab === 'legal' && <Legal />}
+          {activeTab === 'support' && <Support />}
         </div>
-        
-        <div className="relative h-[400px] w-full rounded-[20px] bg-gradient-to-br from-blue-50 to-green-50 dark:from-blue-900/30 dark:to-green-900/20 shadow-lg border border-border-theme flex items-center justify-center p-8 transition-colors duration-250">
-           <div className="absolute top-[10%] left-[10%] w-[120px] bg-surface p-3 rounded-xl shadow-[0_10px_30px_var(--shadow-color)] border border-border-theme flex flex-col items-center gap-2 animate-float" style={{ animationDelay: '0s' }}>
-              <span className="text-3xl">🚀</span>
-              <span className="text-[10px] font-bold text-text-primary">Landed job at Google</span>
-           </div>
-           <div className="absolute bottom-[20%] right-[5%] w-[130px] bg-surface p-3 rounded-xl shadow-[0_10px_30px_var(--shadow-color)] border border-border-theme flex flex-col items-center gap-2 animate-float" style={{ animationDelay: '0.8s' }}>
-              <span className="text-3xl">🏆</span>
-              <span className="text-[10px] font-bold text-text-primary">Won ETHGlobal</span>
-           </div>
-           <div className="absolute top-[40%] right-[15%] w-[100px] bg-surface p-3 rounded-xl shadow-[0_10px_30px_var(--shadow-color)] border border-border-theme flex flex-col items-center gap-2 animate-float" style={{ animationDelay: '1.5s' }}>
-              <span className="text-3xl">💡</span>
-              <span className="text-[10px] font-bold text-text-primary">Top 10 Finalist</span>
-           </div>
-           <div className="w-64 h-64 bg-surface/40 backdrop-blur-md rounded-full absolute border border-border-theme/60"></div>
-        </div>
-      </section>
-
-      {/* Explore Your Interest */}
-      <section id="explore" className="bg-surface-secondary py-20 px-6 lg:px-12 transition-colors duration-250">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-[28px] font-[700] text-text-primary mb-3 transition-colors duration-250">Explore Your Interest</h2>
-            <p className="text-[15px] text-text-secondary transition-colors duration-250">Find standard competitions tailored to your skills and domain.</p>
-          </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[20px]">
-             {[ 
-               { title: 'Coding & Tech', sub: 'Hackathons, DSA', icon: Code, colorClass: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
-               { title: 'Business & Mgmt', sub: 'Case studies', icon: Lightbulb, colorClass: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300' },
-               { title: 'Design & UX', sub: 'UI/UX Challenges', icon: Target, colorClass: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' },
-               { title: 'Cultural & Arts', sub: 'Festivals, Media', icon: Sparkles, colorClass: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300' }
-             ].map((cat, i) => (
-                <div key={i} className="bg-surface rounded-[14px] p-7 flex flex-col items-center text-center shadow-sm border border-border-theme transition-all duration-200 hover:-translate-y-[2px] hover:border-primary-blue hover:shadow-[0_0_0_3px_var(--focus-ring)] cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring" tabIndex={0}>
-                   <div className={`w-[52px] h-[52px] rounded-[14px] flex items-center justify-center mb-4 ${cat.colorClass}`}>
-                      <cat.icon className="w-6 h-6" />
-                   </div>
-                   <h3 className="text-[15px] font-[600] text-text-primary mb-1">{cat.title}</h3>
-                   <p className="text-[12px] text-text-secondary">{cat.sub}</p>
-                </div>
-             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Featured Competitions */}
-      <section id="competitions" className="py-20 px-6 lg:px-12 max-w-7xl mx-auto">
-         <div className="flex items-center justify-between mb-10">
-            <h2 className="text-[28px] font-[700] text-text-primary transition-colors duration-250">Featured Competitions</h2>
-            <button onClick={handleLogin} className="text-primary-blue font-bold text-[14px] hover:underline flex items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded">View All <ArrowRight className="w-4 h-4" /></button>
-         </div>
-
-         <div className="grid grid-cols-1 md:grid-cols-3 gap-[20px]">
-            {/* Card 1 */}
-            <div className="bg-surface border border-border-theme rounded-[12px] overflow-hidden shadow-[0_10px_30px_var(--shadow-color)] hover:shadow-lg hover:-translate-y-[3px] transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring" tabIndex={0}>
-               <div className="h-[150px] bg-gradient-to-br from-[#0F172A] to-[#1E3A8A] flex items-center justify-center relative p-4">
-                  <div className="absolute top-3 left-3 px-2 py-1 bg-[#16A34A] text-white text-[10px] font-bold uppercase rounded-full">LIVE</div>
-                  <h3 className="text-white text-xl font-black tracking-widest text-center opacity-80 mt-2">HACKATHON 2024</h3>
-               </div>
-               <div className="p-5">
-                  <div className="flex items-center gap-3 mb-3">
-                     <div className="w-[22px] h-[22px] rounded-[5px] bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 flex items-center justify-center text-[10px] font-bold">ML</div>
-                     <span className="text-[13px] text-text-secondary font-medium">Major League Hacking</span>
-                  </div>
-                  <h4 className="text-[15px] font-[600] text-text-primary mb-3 line-clamp-2">Global Innovation Challenge: AI & Web3</h4>
-                  <div className="flex items-center text-[12px] text-text-secondary justify-between">
-                     <span>📅 Apr 15 - Apr 17</span>
-                     <span>👥 1,204 Registered</span>
-                  </div>
-               </div>
-            </div>
-
-            {/* Card 2 */}
-            <div className="bg-surface border border-border-theme rounded-[12px] overflow-hidden shadow-[0_10px_30px_var(--shadow-color)] hover:shadow-lg hover:-translate-y-[3px] transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring" tabIndex={0}>
-               <div className="h-[150px] bg-surface-secondary flex items-center justify-center relative p-4">
-                  <div className="absolute top-3 left-3 px-2 py-1 bg-[#F97316] text-white text-[10px] font-bold uppercase rounded-full">PREMIUM</div>
-                  <Trophy className="w-16 h-16 text-muted opacity-50" />
-               </div>
-               <div className="p-5">
-                  <div className="flex items-center gap-3 mb-3">
-                     <div className="w-[22px] h-[22px] rounded-[5px] bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300 flex items-center justify-center text-[10px] font-bold">ST</div>
-                     <span className="text-[13px] text-text-secondary font-medium">Stanford Univ</span>
-                  </div>
-                  <h4 className="text-[15px] font-[600] text-text-primary mb-3 line-clamp-2">Stanford Business Case Competition 2025</h4>
-                  <div className="flex items-center text-[12px] text-text-secondary justify-between">
-                     <span>📅 May 01 - May 05</span>
-                     <span>👥 850 Registered</span>
-                  </div>
-               </div>
-            </div>
-
-            {/* Card 3 */}
-            <div className="bg-surface border border-border-theme rounded-[12px] overflow-hidden shadow-[0_10px_30px_var(--shadow-color)] hover:shadow-lg hover:-translate-y-[3px] transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring" tabIndex={0}>
-               <div className="h-[150px] bg-surface-secondary flex items-center justify-center relative p-4">
-                  <div className="absolute top-3 left-3 px-2 py-1 bg-[#16A34A] text-white text-[10px] font-bold uppercase rounded-full">FREE</div>
-                  <Target className="w-16 h-16 text-muted opacity-50" />
-               </div>
-               <div className="p-5">
-                  <div className="flex items-center gap-3 mb-3">
-                     <div className="w-[22px] h-[22px] rounded-[5px] bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300 flex items-center justify-center text-[10px] font-bold">GO</div>
-                     <span className="text-[13px] text-text-secondary font-medium">Google Developer Groups</span>
-                  </div>
-                  <h4 className="text-[15px] font-[600] text-text-primary mb-3 line-clamp-2">Solution Challenge India Regional</h4>
-                  <div className="flex items-center text-[12px] text-text-secondary justify-between">
-                     <span>📅 Mar 10 - Jun 20</span>
-                     <span>👥 5,200 Registered</span>
-                  </div>
-               </div>
-            </div>
-         </div>
-      </section>
-
-      {/* Stats Bar */}
-      <section id="stats" className="bg-primary-blue dark:bg-surface-secondary dark:border-y border-border-theme py-[52px] px-6 transition-colors duration-250">
-         <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-center gap-10 md:gap-[80px] text-center">
-            <div>
-               <div className="text-[40px] font-[800] text-white dark:text-text-primary">5M+</div>
-               <div className="text-[13px] uppercase tracking-[0.1em] text-white/80 dark:text-text-secondary mt-1 font-medium">Users</div>
-            </div>
-            <div className="hidden md:block w-px h-[40px] bg-white/20 dark:bg-border-theme"></div>
-            <div>
-               <div className="text-[40px] font-[800] text-white dark:text-text-primary">100k+</div>
-               <div className="text-[13px] uppercase tracking-[0.1em] text-white/80 dark:text-text-secondary mt-1 font-medium">Events</div>
-            </div>
-            <div className="hidden md:block w-px h-[40px] bg-white/20 dark:bg-border-theme"></div>
-            <div>
-               <div className="text-[40px] font-[800] text-white dark:text-text-primary">2k+</div>
-               <div className="text-[13px] uppercase tracking-[0.1em] text-white/80 dark:text-text-secondary mt-1 font-medium">Companies</div>
-            </div>
-            <div className="hidden md:block w-px h-[40px] bg-white/20 dark:bg-border-theme"></div>
-            <div>
-               <div className="text-[40px] font-[800] text-white dark:text-text-primary">500k+</div>
-               <div className="text-[13px] uppercase tracking-[0.1em] text-white/80 dark:text-text-secondary mt-1 font-medium">Hired</div>
-            </div>
-         </div>
-      </section>
+      )}
 
       {/* Footer */}
       <footer id="footer" className="bg-background pt-20 pb-8 px-6 lg:px-12 max-w-7xl mx-auto transition-colors duration-250">
@@ -294,6 +407,7 @@ export default function SplashAuth() {
                <button onClick={() => setActiveTab('cookies')} className="text-[13px] text-text-secondary hover:text-text-primary bg-transparent border-none cursor-pointer p-0 font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded">Cookie Policy</button>
                <button onClick={() => setActiveTab('guidelines')} className="text-[13px] text-text-secondary hover:text-text-primary bg-transparent border-none cursor-pointer p-0 font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded">Guidelines</button>
                <button onClick={() => setActiveTab('security')} className="text-[13px] text-text-secondary hover:text-text-primary bg-transparent border-none cursor-pointer p-0 font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded">Security</button>
+               <button onClick={() => setActiveTab('help')} className="text-[13px] text-text-secondary hover:text-text-primary bg-transparent border-none cursor-pointer p-0 font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded">Help Center</button>
                <button onClick={() => setActiveTab('support')} className="text-[13px] text-text-secondary hover:text-text-primary bg-transparent border-none cursor-pointer p-0 font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded">Support & Feedback</button>
             </div>
          </div>
@@ -337,12 +451,21 @@ export default function SplashAuth() {
               </button>
             </div>
             
-            <div className="mt-8 text-center">
+            <div className="mt-8 text-center space-y-2">
               <p className="text-xs text-text-secondary">
                 By continuing, you agree to YuvaHub's{' '}
                 <button onClick={() => { setIsModalOpen(false); setActiveTab('terms'); }} className="text-primary-blue hover:underline bg-transparent border-none cursor-pointer p-0 font-medium">Terms of Service</button>
                 {' '}and{' '}
                 <button onClick={() => { setIsModalOpen(false); setActiveTab('privacy'); }} className="text-primary-blue hover:underline bg-transparent border-none cursor-pointer p-0 font-medium">Privacy Policy</button>.
+              </p>
+              <p className="text-xs text-text-secondary">
+                Need help signing in?{' '}
+                <button
+                  onClick={() => { setIsModalOpen(false); setActiveTab('help'); }}
+                  className="text-primary-blue hover:underline bg-transparent border-none cursor-pointer p-0 font-medium"
+                >
+                  Visit the Help Center
+                </button>
               </p>
             </div>
           </div>

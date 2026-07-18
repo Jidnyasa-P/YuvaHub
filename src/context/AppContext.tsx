@@ -24,6 +24,8 @@ interface AppContextType {
   clearSelectedOpportunity: () => void;
   theme: 'light' | 'dark';
   toggleTheme: () => void;
+  gettingStartedStep: string | null;
+  setGettingStartedStep: (step: string | null) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -52,6 +54,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const oppMatch = window.location.pathname.match(/^\/opportunity\/([^/]+)/);
     return oppMatch ? oppMatch[1] : null;
   });
+
+  const [gettingStartedStep, setGettingStartedStep] = useState<string | null>(null);
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -199,7 +203,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       viewOpportunity,
       clearSelectedOpportunity,
       theme,
-      toggleTheme
+      toggleTheme,
+      gettingStartedStep,
+      setGettingStartedStep
     }}>
       {children}
     </AppContext.Provider>

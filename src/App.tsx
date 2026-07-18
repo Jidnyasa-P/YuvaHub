@@ -22,12 +22,15 @@ import SplashAuth from './components/SplashAuth';
 import Security from './components/Tabs/Security';
 import Legal from './components/Tabs/Legal';
 import Support from './components/Tabs/Support';
+import HelpCenter from './components/Tabs/HelpCenter';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import Cookies from './pages/Cookies';
 import Guidelines from './pages/Guidelines';
 import About from './pages/About';
 import AboutTab from './components/Tabs/About';
+import HelpCenterPage from './pages/HelpCenter';
+import GettingStartedDetail from './pages/GettingStartedDetail';
 
 function App() {
   const {
@@ -46,7 +49,9 @@ function App() {
     selectedOppId,
     clearSelectedOpportunity,
     theme,
-    toggleTheme
+    toggleTheme,
+    gettingStartedStep,
+    setGettingStartedStep
   } = useAppContext();
 
   // WebMCP Integration
@@ -121,6 +126,7 @@ function App() {
       case 'legal': return <Legal />;
       case 'support': return <Support />;
       case 'about': return <AboutTab />;
+      case 'help': return gettingStartedStep ? <GettingStartedDetail stepId={gettingStartedStep as any} /> : <HelpCenterPage />;
       default: return <Dashboard />;
     }
   };
@@ -194,6 +200,8 @@ function App() {
                 key={tab.id}
                 onClick={() => {
                   setActiveTab(tab.id);
+                  // Clear getting-started step when navigating away from help
+                  if (tab.id !== 'help') setGettingStartedStep(null);
                   clearSelectedOpportunity();
                   scrollContentToTop();
                 }}
@@ -259,6 +267,8 @@ function App() {
                   key={tab.id}
                   onClick={() => {
                     setActiveTab(tab.id);
+                    // Clear getting-started step when navigating away from help
+                    if (tab.id !== 'help') setGettingStartedStep(null);
                     clearSelectedOpportunity();
                     setIsMobileMenuOpen(false);
                     scrollContentToTop();
@@ -335,7 +345,7 @@ function App() {
           <span className="font-medium">{backendReady ? 'Live' : 'Offline'}</span>
           <span className="hidden sm:inline">· Last synced: {lastSyncedTime}</span>
           <span>· Opportunities indexed & verified</span>
-          <span className="hidden md:inline">· YuvaHub © 2026 · <button onClick={() => setActiveTab('about')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-400">About</button> · <button onClick={() => setActiveTab('privacy')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-450 font-medium font-semibold">Privacy Policy</button> · <button onClick={() => setActiveTab('terms')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-450 font-medium font-semibold">Terms of Service</button> · <button onClick={() => setActiveTab('cookies')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-450 font-medium">Cookie Policy</button> · <button onClick={() => setActiveTab('guidelines')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-450 font-medium">Guidelines</button> · <button onClick={() => setActiveTab('legal')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-400">Legal Index</button> · <button onClick={() => setActiveTab('security')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-400">Security Center</button></span>
+          <span className="hidden md:inline">· YuvaHub © 2026 · <button onClick={() => setActiveTab('about')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-400">About</button> · <button onClick={() => setActiveTab('privacy')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-450 font-medium font-semibold">Privacy Policy</button> · <button onClick={() => setActiveTab('terms')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-450 font-medium font-semibold">Terms of Service</button> · <button onClick={() => setActiveTab('cookies')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-450 font-medium">Cookie Policy</button> · <button onClick={() => setActiveTab('guidelines')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-450 font-medium">Guidelines</button> · <button onClick={() => setActiveTab('legal')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-400">Legal Index</button> · <button onClick={() => setActiveTab('security')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-400">Security Center</button> · <button onClick={() => setActiveTab('help')} className="hover:underline hover:text-white cursor-pointer font-medium bg-transparent border-none p-0 text-xs text-gray-400">Help Center</button></span>
         </div>
       </main>
 
