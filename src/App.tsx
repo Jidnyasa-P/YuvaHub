@@ -26,7 +26,7 @@ import HelpCenter from './components/Tabs/HelpCenter';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import Cookies from './pages/Cookies';
-import Guidelines from './pages/Guidelines';
+import Guidelines from './components/Tabs/Guidelines';
 import About from './pages/About';
 import AboutTab from './components/Tabs/About';
 import HelpCenterPage from './pages/HelpCenter';
@@ -231,9 +231,7 @@ function App() {
     );
   }
 
-  const isPublicRoute = selectedOppId || PUBLIC_TABS.includes(activeTab);
-
-  if (!user && isPublicRoute) {
+  if ((activeTab === 'legal' || activeTab === 'security' || activeTab === 'support' || activeTab === 'about' || activeTab === 'guidelines') && !user) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col font-sans">
         {/* Public Header */}
@@ -285,28 +283,8 @@ function App() {
               ← Back to Home
             </button>
           </div>
-          {selectedOppId ? (
-            <OpportunityDetail />
-          ) : (
-            renderContent()
-          )}
-        </main>
-
-        {/* Public Footer */}
-        <footer className="bg-white dark:bg-gray-800 border-t border-gray-250 dark:border-gray-700 py-8 px-6 lg:px-12 mt-auto">
-          <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-            <span className="text-[13px] text-gray-500 dark:text-gray-400">&copy; 2026 YuvaHub Inc. All rights reserved.</span>
-            <div className="flex flex-wrap gap-6 text-[13px] text-gray-500 dark:text-gray-400">
-              <button onClick={() => { clearSelectedOpportunity(); setActiveTab('about'); }} className="hover:text-blue-600 dark:hover:text-blue-400 bg-transparent border-none cursor-pointer">About Us</button>
-              <button onClick={() => { clearSelectedOpportunity(); setActiveTab('privacy'); }} className="hover:text-blue-600 dark:hover:text-blue-400 bg-transparent border-none cursor-pointer">Privacy Policy</button>
-              <button onClick={() => { clearSelectedOpportunity(); setActiveTab('terms'); }} className="hover:text-blue-600 dark:hover:text-blue-400 bg-transparent border-none cursor-pointer">Terms of Service</button>
-              <button onClick={() => { clearSelectedOpportunity(); setActiveTab('cookies'); }} className="hover:text-blue-600 dark:hover:text-blue-400 bg-transparent border-none cursor-pointer">Cookie Policy</button>
-              <button onClick={() => { clearSelectedOpportunity(); setActiveTab('guidelines'); }} className="hover:text-blue-600 dark:hover:text-blue-400 bg-transparent border-none cursor-pointer">Guidelines</button>
-              <button onClick={() => { clearSelectedOpportunity(); setActiveTab('security'); }} className="hover:text-blue-600 dark:hover:text-blue-400 bg-transparent border-none cursor-pointer">Security</button>
-              <button onClick={() => { clearSelectedOpportunity(); setActiveTab('support'); }} className="hover:text-blue-600 dark:hover:text-blue-400 bg-transparent border-none cursor-pointer">Support</button>
-            </div>
-          </div>
-        </footer>
+          {activeTab === 'legal' ? <Legal /> : activeTab === 'security' ? <Security /> : activeTab === 'about' ? <AboutTab /> : activeTab === 'guidelines' ? <Guidelines /> : <Support />}
+        </div>
       </div>
     );
   }
