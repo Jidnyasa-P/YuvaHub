@@ -76,7 +76,7 @@ export default function LandingNavbar({ onLoginClick, onNavClick }: LandingNavba
 
         <button
           onClick={onLoginClick}
-          className="px-5 py-2 text-[14px] font-medium bg-primary-blue text-white rounded-[8px] hover:brightness-110 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="hidden md:block px-5 py-2 text-[14px] font-medium bg-primary-blue text-white rounded-[8px] hover:brightness-110 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           Get Started
         </button>
@@ -111,7 +111,7 @@ export default function LandingNavbar({ onLoginClick, onNavClick }: LandingNavba
           ))}
           <button
             onClick={() => { setMobileOpen(false); onLoginClick(); }}
-            className="mt-2 px-5 py-2.5 text-[14px] font-medium bg-primary-blue text-white rounded-[8px] hover:brightness-110 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring text-left"
+            className="mt-2 px-5 py-2.5 text-[14px] font-medium bg-primary-blue text-white rounded-[8px] hover:brightness-110 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring text-left"
           >
             Get Started
           </button>

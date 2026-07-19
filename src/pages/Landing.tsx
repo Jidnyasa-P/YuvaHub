@@ -286,7 +286,7 @@ export default function Landing() {
       {/* ─── Login modal ──────────────────────────────────────────────────── */}
       {isModalOpen && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
           role="dialog"
           aria-modal="true"
           aria-label="Sign in to YuvaHub"
@@ -294,7 +294,7 @@ export default function Landing() {
           <div className="bg-surface rounded-[20px] w-full max-w-md shadow-[0_10px_30px_var(--shadow-color)] p-8 border border-border-theme relative animate-fade-in">
             <button
               onClick={closeLoginModal}
-              className="absolute top-4 right-4 w-9 h-9 rounded-full bg-surface-secondary border border-border-theme flex items-center justify-center text-text-secondary hover:text-text-primary hover:brightness-90 dark:hover:brightness-110 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+              className="absolute top-4 right-4 w-9 h-9 rounded-full bg-surface-secondary border border-border-theme flex items-center justify-center text-text-secondary hover:text-text-primary hover:brightness-90 dark:hover:brightness-110 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
               aria-label="Close sign in modal"
             >
               <X className="w-5 h-5" />

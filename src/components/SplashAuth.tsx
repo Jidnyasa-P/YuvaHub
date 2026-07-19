@@ -68,7 +68,7 @@ export default function SplashAuth() {
           <button className="hidden sm:block px-4 py-2 text-[14px] font-medium border border-border-theme text-text-primary rounded-[8px] hover:bg-surface-secondary transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring">
             Host Event
           </button>
-          <button onClick={handleLogin} disabled={loading !== null} className="px-5 py-2 text-[14px] font-medium bg-primary-blue text-white rounded-[8px] hover:brightness-110 transition-all disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+          <button onClick={handleLogin} disabled={loading !== null} className="px-5 py-2 text-[14px] font-medium bg-primary-blue text-white rounded-[8px] hover:brightness-110 transition-all disabled:opacity-50 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
             {loading !== null ? 'Wait...' : 'Login'}
           </button>
         </div>
@@ -415,11 +415,11 @@ export default function SplashAuth() {
 
       {/* Login Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
           <div className="bg-surface rounded-[20px] w-full max-w-md shadow-[0_10px_30px_var(--shadow-color)] p-8 border border-border-theme relative animate-fade-in">
             <button 
               onClick={() => setIsModalOpen(false)}
-              className="absolute top-4 right-4 w-9 h-9 rounded-full bg-surface-secondary border border-border-theme flex items-center justify-center text-text-secondary hover:text-text-primary hover:brightness-90 dark:hover:brightness-110 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+              className="absolute top-4 right-4 w-9 h-9 rounded-full bg-surface-secondary border border-border-theme flex items-center justify-center text-text-secondary hover:text-text-primary hover:brightness-90 dark:hover:brightness-110 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
             >
               <X className="w-5 h-5" />
             </button>
