@@ -74,12 +74,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-const [activeTab, setActiveTab] = useState("home");
-const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [selectedOppId, setSelectedOppId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const oppMatch = window.location.pathname.match(/^\/opportunity\/([^/]+)/);
+    return oppMatch ? oppMatch[1] : null;
+  });
 
-const [selectedOppId, setSelectedOppId] = useState<string | null>(null);
-
-const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
+  const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
+  
   // Authentication state
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -96,20 +98,8 @@ const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
     }
     return 'light';
   });
-
-  // ─── Theme sync ──────────────────────────────────────────────────────────────
-
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [selectedOppId, setSelectedOppId] = useState<string | null>(null);
-  const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
+  
   const [gettingStartedStep, setGettingStartedStep] = useState<string | null>(null);
-  const [selectedOppId, setSelectedOppId] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const oppMatch = window.location.pathname.match(/^\/opportunity\/([^/]+)/);
-    return oppMatch ? oppMatch[1] : null;
-  });
-  const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
 
   useEffect(() => {
     const root = window.document.documentElement;
