@@ -592,6 +592,8 @@ process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGBREAK", () => gracefulShutdown("SIGBREAK"));
 
+import { createAdapter } from "@socket.io/redis-adapter";
+
 let ioInstance: any = null;
 export function getSocketIO() {
   return ioInstance;
@@ -605,7 +607,25 @@ async function startServer() {
   const frontendUrl = process.env.FRONTEND_URL;
   const corsOptions = frontendUrl ? { origin: frontendUrl } : { origin: "*" };
   
-  const io = new Server(server, { cors: corsOptions });
+  const io = new Server(server, { 
+    cors: corsOptions,
+    connectionStateRecovery: {
+      maxDisconnectionDuration: 2 * 60 * 1000,
+      skipMiddlewares: true,
+    }
+  });
+
+  if (redisClient) {
+    const pubClient = redisClient.duplicate();
+    const subClient = redisClient.duplicate();
+    
+    // Fallback if Redis fails so it doesn't crash the server
+    pubClient.on('error', (err) => console.warn('[Socket.io Redis Pub] Error:', err.message));
+    subClient.on('error', (err) => console.warn('[Socket.io Redis Sub] Error:', err.message));
+    
+    io.adapter(createAdapter(pubClient, subClient));
+  }
+
   ioInstance = io;
   const PORT = process.env.PORT ? parseInt(process.env.PORT) : 5173;
 
