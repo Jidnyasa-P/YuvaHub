@@ -3588,7 +3588,7 @@ app.post(
   });
 
   // --- Scholarship Hub API Routes ---
-  app.post("/api/scholarships", async (req, res) => {
+  app.post("/api/scholarships", authorizeRoles("admin"), async (req, res) => {
     try {
       if (!dbCommand || !dbQuery) return res.status(503).json({ error: "Database not available" });
       const parsedData = ScholarshipSchema.parse(req.body);
@@ -3653,7 +3653,7 @@ app.post(
     }
   });
 
-  app.put("/api/scholarships/:id", async (req, res) => {
+  app.put("/api/scholarships/:id", authorizeRoles("admin"), async (req, res) => {
     try {
       if (!dbCommand || !dbQuery) return res.status(503).json({ error: "Database not available" });
       const id = req.params.id;
@@ -3680,7 +3680,7 @@ app.post(
     }
   });
 
-  app.delete("/api/scholarships/:id", async (req, res) => {
+  app.delete("/api/scholarships/:id", authorizeRoles("admin"), async (req, res) => {
     try {
       if (!dbCommand || !dbQuery) return res.status(503).json({ error: "Database not available" });
       const id = req.params.id;
