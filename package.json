@@ -19,7 +19,8 @@
     "test-scraper": "tsx tests/test-scraper.ts",
     "test-semantic-search": "tsx tests/test-semantic-search.ts",
     "test-auth": "tsx tests/test-jit-auth.ts",
-    "test-socket": "tsx tests/test-socket-fallback.ts"
+    "test-socket": "tsx tests/test-socket-fallback.ts",
+    "test-eventbus": "tsx tests/test-eventbus.ts"
   },
   "dependencies": {
     "@bull-board/api": "^8.1.2",

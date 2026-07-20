@@ -4,7 +4,6 @@ const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://localhost';
 
 class EventBus {
   private connection: amqp.ChannelModel | null = null;
-  private connection: any | null = null;
   private channel: amqp.Channel | null = null;
 
   async connect(): Promise<void> {
