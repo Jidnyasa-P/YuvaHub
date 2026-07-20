@@ -1425,7 +1425,7 @@ ${urls.join("\n")}
         email = firebaseUser.email || "";
         name = firebaseUser.displayName || "";
         avatarUrl = firebaseUser.photoUrl || "";
-      } else {
+      } else if (process.env.NODE_ENV === "development" && process.env.ENABLE_MOCK_AUTH === "true") {
         // Mock verification for local offline development without a Firebase API key
         try {
           const parts = idToken.split(".");
@@ -1443,6 +1443,8 @@ ${urls.join("\n")}
         if (!uid) {
           return res.status(401).json({ error: "Unauthorized: Mock validation failed" });
         }
+      } else {
+        return res.status(401).json({ error: "Authentication service not configured" });
       }
 
       // 3. Sync profile with MongoDB
@@ -1685,7 +1687,7 @@ ${urls.join("\n")}
       uid = data.users[0].localId;
       email = data.users[0].email || "";
       role = email === "uditt490@gmail.com" ? "admin" : "user";
-    } else {
+    } else if (process.env.NODE_ENV === "development" && process.env.ENABLE_MOCK_AUTH === "true") {
       try {
         const parts = idToken.split(".");
         if (parts.length === 3) {
@@ -1701,6 +1703,8 @@ ${urls.join("\n")}
       if (!uid) {
         throw new Error("Unauthorized: Mock validation failed");
       }
+    } else {
+      throw new Error("Authentication service not configured");
     }
 
     return { uid, email, role };
