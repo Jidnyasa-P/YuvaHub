@@ -18,6 +18,7 @@ import AdminDashboard from './components/Admin/AdminDashboard';
 import NotificationDropdown from './components/ui/NotificationDropdown';
 import OpportunityDetail from './components/Tabs/OpportunityDetail';
 import AIAssistant from './components/Tabs/AIAssistant';
+import BountyBoard from './components/Tabs/BountyBoard';
 import BackToTopButton from './components/ui/BackToTopButton';import OnboardingFlow from './components/OnboardingFlow';
 import SplashAuth from './components/SplashAuth';
 import Security from './components/Tabs/Security';
@@ -136,7 +137,9 @@ function App() {
     theme,
     toggleTheme,
     gettingStartedStep,
-    setGettingStartedStep
+    setGettingStartedStep,
+    karmaBalance,
+    karmaBumpFlag
   } = useAppContext();
 
   const { isConnected, transportMode } = useSocket();
@@ -198,6 +201,7 @@ function App() {
     { id: 'ai_assistant', label: 'AI Assistant', icon: Sparkles },
     { id: 'submit', label: 'Submit Opportunity', icon: PlusCircle },
     { id: 'mentorship', label: 'Mentorship', icon: Users },
+    { id: 'bounty_board', label: 'Bounty Board', icon: Sparkles },
     { id: 'community', label: 'Community', icon: MessageSquare },
     { id: 'profile', label: 'My Profile', icon: User },
     { id: 'settings', label: 'Settings', icon: Settings },
@@ -213,6 +217,7 @@ function App() {
       case 'ai_assistant': return <AIAssistant />;
       case 'submit': return <SubmitOpportunity />;
       case 'mentorship': return <Mentorship />;
+      case 'bounty_board': return <BountyBoard />;
       case 'community': return <Community />;
       case 'profile': return <Profile />;
       case 'settings': return <SettingsTab />;
@@ -471,6 +476,11 @@ function App() {
               )}
            </div>
            <div className="flex items-center gap-5">
+              {user && (
+                <div className={`hidden md:flex items-center gap-1.5 px-3 py-1 rounded-full font-bold text-sm bg-yellow-50 text-yellow-700 dark:bg-yellow-500/10 dark:text-yellow-500 ${karmaBumpFlag ? 'animate-karma-bounce' : ''}`}>
+                  💠 {karmaBalance} Karma
+                </div>
+              )}
               <div className="hidden md:flex items-center gap-2 text-xs font-medium bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700">
                 <span className={`w-2 h-2 rounded-full ${isConnected ? (transportMode === 'websocket' ? 'bg-green-500' : 'bg-yellow-500') : 'bg-red-500'}`}></span>
                 <span className="text-gray-600 dark:text-gray-300">

@@ -90,3 +90,37 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
 }
+
+export interface Bounty {
+  _id?: string;
+  id?: string;
+  title: string;
+  description: string;
+  tags: string[];
+  reward: number;
+  status: 'open' | 'accepted' | 'resolved';
+  posterId: string;
+  posterName: string;
+  mentorId?: string;
+  mentorName?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface KarmaTransaction {
+  _id?: string;
+  userId: string;
+  amount: number;
+  type: 'daily_login' | 'bounty_post' | 'bounty_reward' | 'profile_setup' | 'expired_report' | 'other';
+  timestamp: number;
+  metadata?: any;
+}
+
+export interface LeaderboardEntry {
+  userId: string;
+  name: string;
+  avatarUrl?: string;
+  reputation: number;
+  karmaEarned: number;
+  bountiesResolved: number;
+}

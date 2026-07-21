@@ -1889,6 +1889,202 @@ ${urls.join("\n")}
     }
   });
 
+  // --- Karma API ---
+  app.get("/api/v1/karma/balance", async (req, res) => {
+    try {
+      const user = await getAuthenticatedUser(req);
+      if (!dbQuery) return res.status(503).json({ error: "Database not available" });
+      const txs = await dbQuery.collection("transactions").find({ userId: user.uid }).toArray();
+      let balance = txs.reduce((acc: number, tx: any) => acc + (tx.amount || 0), 0);
+      
+      if (balance === 0 && process.env.NODE_ENV === "development") {
+        if (dbCommand) {
+          await dbCommand.collection("transactions").insertOne({
+            userId: user.uid,
+            amount: 1000,
+            type: 'debug_grant',
+            timestamp: Date.now()
+          });
+          balance = 1000;
+        }
+      }
+      
+      res.json({ balance });
+    } catch(err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/v1/karma/award", async (req, res) => {
+    try {
+      const user = await getAuthenticatedUser(req);
+      if (!dbCommand) return res.status(503).json({ error: "Database not available" });
+      const { type, metadata } = req.body;
+      let amount = 0;
+      if (type === 'daily_login') amount = 10;
+      else if (type === 'profile_setup') amount = 50;
+      else if (type === 'expired_report') amount = 5;
+      
+      if (amount > 0) {
+        if (type === 'daily_login') {
+          const startOfDay = new Date();
+          startOfDay.setHours(0, 0, 0, 0);
+          const existing = await dbCommand.collection("transactions").findOne({
+            userId: user.uid,
+            type: 'daily_login',
+            timestamp: { $gte: startOfDay.getTime() }
+          });
+          if (existing) return res.status(400).json({ error: "Daily login already claimed" });
+        }
+        
+        await dbCommand.collection("transactions").insertOne({
+          userId: user.uid,
+          amount,
+          type,
+          timestamp: Date.now(),
+          metadata
+        });
+      }
+      res.json({ success: true, awarded: amount });
+    } catch(err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // --- Bounties API ---
+  app.get("/api/v1/bounties", async (req, res) => {
+    try {
+      if (!dbQuery) return res.status(503).json({ error: "Database not available" });
+      const bounties = await dbQuery.collection("bounties").find({ status: { $in: ['open', 'accepted'] } }).sort({ createdAt: -1 }).limit(100).toArray();
+      res.json({ items: bounties.map((b: any) => ({ ...b, id: b._id.toString() })) });
+    } catch(err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/v1/bounties", async (req, res) => {
+    try {
+      const user = await getAuthenticatedUser(req);
+      if (!dbCommand) return res.status(503).json({ error: "Database not available" });
+      const { title, description, tags, reward, posterName } = req.body;
+      
+      const txs = await dbCommand.collection("transactions").find({ userId: user.uid }).toArray();
+      const balance = txs.reduce((acc: number, tx: any) => acc + (tx.amount || 0), 0);
+      if (balance < reward) return res.status(400).json({ error: "Insufficient karma" });
+      
+      await dbCommand.collection("transactions").insertOne({
+        userId: user.uid,
+        amount: -reward,
+        type: 'bounty_post',
+        timestamp: Date.now()
+      });
+      
+      const bounty = {
+        title, description, tags, reward,
+        status: 'open',
+        posterId: user.uid,
+        posterName,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      const result = await dbCommand.collection("bounties").insertOne(bounty);
+      res.json({ success: true, bounty: { ...bounty, id: result.insertedId.toString() } });
+    } catch(err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/v1/bounties/:id/accept", async (req, res) => {
+    try {
+      const user = await getAuthenticatedUser(req);
+      if (!dbCommand) return res.status(503).json({ error: "Database not available" });
+      const { ObjectId } = await import("mongodb");
+      const { mentorName } = req.body;
+      
+      const result = await dbCommand.collection("bounties").updateOne(
+        { _id: new ObjectId(req.params.id), status: 'open' },
+        { $set: { status: 'accepted', mentorId: user.uid, mentorName, updatedAt: Date.now() } }
+      );
+      if (result.modifiedCount === 0) return res.status(400).json({ error: "Bounty not available" });
+      res.json({ success: true });
+    } catch(err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/v1/bounties/:id/resolve", async (req, res) => {
+    try {
+      const user = await getAuthenticatedUser(req);
+      if (!dbCommand) return res.status(503).json({ error: "Database not available" });
+      const { ObjectId } = await import("mongodb");
+      
+      const bounty = await dbCommand.collection("bounties").findOne({ _id: new ObjectId(req.params.id) });
+      if (!bounty) return res.status(404).json({ error: "Not found" });
+      if (bounty.posterId !== user.uid) return res.status(403).json({ error: "Only poster can resolve" });
+      
+      await dbCommand.collection("bounties").updateOne(
+        { _id: new ObjectId(req.params.id) },
+        { $set: { status: 'resolved', updatedAt: Date.now() } }
+      );
+      
+      await dbCommand.collection("transactions").insertOne({
+        userId: bounty.mentorId,
+        amount: bounty.reward,
+        type: 'bounty_reward',
+        timestamp: Date.now(),
+        metadata: { bountyId: req.params.id }
+      });
+      
+      res.json({ success: true });
+    } catch(err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/v1/bounties/:id/rate", async (req, res) => {
+    try {
+      const user = await getAuthenticatedUser(req);
+      if (!dbCommand) return res.status(503).json({ error: "Database not available" });
+      const { ObjectId } = await import("mongodb");
+      const { rating } = req.body;
+      
+      const bounty = await dbCommand.collection("bounties").findOne({ _id: new ObjectId(req.params.id) });
+      if (!bounty) return res.status(404).json({ error: "Not found" });
+      if (bounty.posterId !== user.uid) return res.status(403).json({ error: "Only poster can rate" });
+      
+      const usersCol = dbCommand.collection("users");
+      await usersCol.updateOne(
+        { uid: bounty.mentorId },
+        { $inc: { reputation: rating, bountiesResolved: 1 } }
+      );
+      
+      res.json({ success: true });
+    } catch(err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/v1/leaderboard", async (req, res) => {
+    try {
+      if (!dbQuery) return res.status(503).json({ error: "Database not available" });
+      const topUsers = await dbQuery.collection("users")
+        .find({ reputation: { $gt: 0 } })
+        .sort({ reputation: -1 })
+        .limit(10)
+        .toArray();
+        
+      res.json({ items: topUsers.map((u: any) => ({
+        userId: u.uid,
+        name: u.name,
+        avatarUrl: u.avatarUrl,
+        reputation: u.reputation || 0,
+        bountiesResolved: u.bountiesResolved || 0
+      }))});
+    } catch(err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   async function getAuthenticatedUser(req: any) {
     const authHeader = req.headers.authorization;
     if (typeof authHeader !== 'string' || !authHeader.startsWith("Bearer ")) {
@@ -4574,6 +4770,27 @@ ${JSON.stringify(userProfile, null, 2)}
         socket.emit("mock_interview_ended", { success: true, score, feedback });
       } catch (err) {
         console.error("End Mock Interview Error:", err);
+      }
+    });
+
+    socket.on("join_bounty_room", (data) => {
+      const { bountyId } = data;
+      if (bountyId) {
+        socket.join(`bounty_${bountyId}`);
+        console.log(`[Socket] Client ${socket.id} joined bounty room: bounty_${bountyId}`);
+      }
+    });
+
+    socket.on("bounty_chat_message", (data) => {
+      const { bountyId, message, senderId, senderName, timestamp } = data;
+      if (bountyId && message) {
+        socket.to(`bounty_${bountyId}`).emit("receive_bounty_message", {
+          bountyId,
+          message,
+          senderId,
+          senderName,
+          timestamp: timestamp || Date.now()
+        });
       }
     });
 
