@@ -32,6 +32,7 @@ import { v2 as cloudinary } from "cloudinary";
 // @ts-ignore
 import multer from "multer";
 import { meiliClient, initializeSearchSync } from "./src/services/searchSync.js";
+import { apiRouter } from "./src/routes/index.js";
 import { ExpressAdapter } from '@bull-board/express';
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
@@ -716,6 +717,7 @@ async function startServer() {
 
   app.use(cors(corsOptions));
   app.use(express.json({ limit: '10mb' }));
+  app.use("/api/v1", apiRouter);
 
   app.post("/api/resume/process", async (req, res) => {
     const { userId, resumeUrl } = req.body;
