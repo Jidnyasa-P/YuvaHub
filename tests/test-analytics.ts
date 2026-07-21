@@ -122,13 +122,8 @@ async function runTest() {
   }
   await Promise.all(extraPromises);
 
-  console.log("Triggering graceful shutdown via API endpoint...");
-  try {
-    await fetch("http://localhost:5173/api/analytics/shutdown", { method: "POST" });
-  } catch (err: any) {
-    console.log("Failed to send shutdown API request, killing process directly:", err.message);
-    serverProcess.kill("SIGTERM");
-  }
+  console.log("Triggering graceful shutdown via SIGTERM process signal...");
+  serverProcess.kill("SIGTERM");
 
   // Wait for server to exit
   await new Promise((resolve) => setTimeout(resolve, 3000));

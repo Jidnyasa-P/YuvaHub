@@ -736,11 +736,6 @@ async function startServer() {
     res.status(202).json({ status: "Accepted" });
   });
 
-  app.post("/api/analytics/shutdown", async (req, res) => {
-    res.status(200).json({ status: "Shutting down" });
-    await gracefulShutdown("API_TRIGGER");
-  });
-
   // REST Fallback for Socket Messages
   app.post("/api/messages", (req, res) => {
     const { eventName, data } = req.body;
