@@ -33,6 +33,7 @@ import AboutTab from './components/Tabs/About';
 import HelpCenterPage from './pages/HelpCenter';
 import GettingStartedDetail from './pages/GettingStartedDetail';
 import { SEO } from './components/SEO';
+import Teams from './components/Tabs/Teams';
 
 const PUBLIC_TABS = ['opportunities', 'about', 'privacy', 'terms', 'cookies', 'guidelines', 'security', 'support', 'legal'];
 
@@ -43,6 +44,8 @@ const getSeoPropsForTab = (tab: string) => {
         title: "YuvaHub | Find Student Hackathons, Scholarships & Mentorships",
         description: "Discovery platform for Indian students. Find hackathons, scholarships, and mentorship opportunities to boost your career. Real-time updates and AI matching."
       };
+    case 'teams':
+      return { title: "Team Builder & Matcher | YuvaHub", description: "Find teammates and join teams for hackathons, projects, and opportunities." };
     case 'opportunities':
       return {
         title: "Explore Opportunities | Internships, Jobs & Hackathons | YuvaHub",
@@ -190,6 +193,7 @@ function App() {
   const TABS = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'opportunities', label: 'Opportunities', icon: Globe },
+    { id: 'teams', label: 'Team Builder', icon: Users },
     { id: 'bookmarks', label: 'Bookmarks', icon: Bookmark },
     { id: 'ai_assistant', label: 'AI Assistant', icon: Sparkles },
     { id: 'submit', label: 'Submit Opportunity', icon: PlusCircle },
@@ -204,6 +208,7 @@ function App() {
     switch (activeTab) {
       case 'dashboard': return <Dashboard />;
       case 'opportunities': return <Opportunities />;
+      case 'teams': return <Teams />;
       case 'bookmarks': return <Bookmarks />;
       case 'ai_assistant': return <AIAssistant />;
       case 'submit': return <SubmitOpportunity />;
