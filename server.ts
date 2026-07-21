@@ -1,4 +1,5 @@
 import { addApplicationJob } from "./src/queues/applicationQueue";
+import { addAgentJob } from "./src/queues/agentQueue";
 import { generateApplicationDraft } from "./src/services/applicationGenerator";
 import express from "express";
 import http from "http";
@@ -738,6 +739,46 @@ async function startServer() {
       ioInstance.emit(eventName, data);
     }
     return res.status(200).json({ success: true, message: "Processed via REST backup" });
+  });
+
+  app.post("/api/agent/apply", authenticateUser, async (req, res) => {
+    try {
+      const { jobUrl } = req.body;
+      const userId = (req as any).user?.uid;
+      
+      if (!jobUrl) {
+        return res.status(400).json({ error: "jobUrl is required" });
+      }
+
+      const job = await addAgentJob({
+        userId,
+        jobUrl,
+        action: "fill_application"
+      });
+
+  res.status(200).json({ success: true, jobId: job.id, message: "Agent job queued" });
+    } catch (e: any) {
+      console.error("Error triggering agent:", e);
+      res.status(500).json({ error: "Failed to trigger agent" });
+    }
+  });
+
+  // Listen to agent progress events and pipe to socket
+  const { QueueEvents } = await import("bullmq");
+  const agentQueueEvents = new QueueEvents("agent-processing", { connection: redisClient as any });
+  agentQueueEvents.on("progress", async ({ jobId, data }) => {
+    // We need the userId to know which room to emit to. Since progress data in BullMQ doesn't natively include the job payload unless passed,
+    // we assume data contains { status: string, userId?: string }.
+    // But wait, the job.updateProgress in worker doesn't pass userId. Let's rely on the job data.
+    // The safest way is to include userId in the updateProgress object or we just query the job.
+    // Since this is just a quick setup, let's fetch the job.
+    const { agentQueue } = await import("./src/queues/agentQueue.js");
+    const job = await agentQueue.getJob(jobId);
+    if (job && job.data.userId) {
+      if (ioInstance) {
+        ioInstance.to(`user_${job.data.userId}`).emit("agent:status", data);
+      }
+    }
   });
 
   // --- Rate Limiting Middlewares ---
