@@ -368,20 +368,32 @@ export default function SplashAuth() {
                </p>
             </div>
             
-            <div className="flex flex-col gap-[9px]">
+            <div className="flex flex-col gap-[9px] items-start">
                <h4 className="font-bold text-text-primary mb-2">Competitions</h4>
-               <a href="#" className="text-[13px] text-text-secondary hover:text-primary-blue transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded">Hackathons</a>
-               <a href="#" className="text-[13px] text-text-secondary hover:text-primary-blue transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded">Quizzes</a>
-               <a href="#" className="text-[13px] text-text-secondary hover:text-primary-blue transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded">Hiring Challenges</a>
-               <a href="#" className="text-[13px] text-text-secondary hover:text-primary-blue transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded">Case Studies</a>
+               {['Hackathons', 'Quizzes', 'Hiring Challenges', 'Case Studies'].map((item) => (
+                  <button
+                     key={item}
+                     type="button"
+                     onClick={handleLogin}
+                     className="text-[13px] text-text-secondary hover:text-primary-blue transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded text-left bg-transparent border-none p-0 cursor-pointer"
+                  >
+                     {item}
+                  </button>
+               ))}
             </div>
 
-            <div className="flex flex-col gap-[9px]">
+            <div className="flex flex-col gap-[9px] items-start">
                <h4 className="font-bold text-text-primary mb-2">Opportunities</h4>
-               <a href="#" className="text-[13px] text-text-secondary hover:text-primary-blue transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded">Internships</a>
-               <a href="#" className="text-[13px] text-text-secondary hover:text-primary-blue transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded">Full Time Jobs</a>
-               <a href="#" className="text-[13px] text-text-secondary hover:text-primary-blue transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded">Scholarships</a>
-               <a href="#" className="text-[13px] text-text-secondary hover:text-primary-blue transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded">Fellowships</a>
+               {['Internships', 'Full Time Jobs', 'Scholarships', 'Fellowships'].map((item) => (
+                  <button
+                     key={item}
+                     type="button"
+                     onClick={handleLogin}
+                     className="text-[13px] text-text-secondary hover:text-primary-blue transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded text-left bg-transparent border-none p-0 cursor-pointer"
+                  >
+                     {item}
+                  </button>
+               ))}
             </div>
 
             <div>
