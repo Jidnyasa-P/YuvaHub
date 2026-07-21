@@ -101,7 +101,7 @@ export const authenticateUser = (dbCommand: any) => {
         try {
           const usersCollection = dbCommand.collection('users');
 
-          await usersCollection.findOneAndUpdate(
+          const userDoc = await usersCollection.findOneAndUpdate(
             { firebaseUid: decodedToken.uid },
             {
               $setOnInsert: {

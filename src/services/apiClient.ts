@@ -374,6 +374,8 @@ export async function searchOpportunities(
     deadlineType?: string;
     startDate?: string;
     endDate?: string;
+    isFree?: boolean;
+    verifiedOnly?: boolean;
   }, 
   cursor?: string
 ) {
@@ -403,6 +405,12 @@ export async function searchOpportunities(
       }
       if (filters.endDate) {
         searchParams.append('endDate', filters.endDate);
+      }
+      if (filters.isFree !== undefined) {
+        searchParams.append('isFree', String(filters.isFree));
+      }
+      if (filters.verifiedOnly !== undefined) {
+        searchParams.append('verifiedOnly', String(filters.verifiedOnly));
       }
     }
     
